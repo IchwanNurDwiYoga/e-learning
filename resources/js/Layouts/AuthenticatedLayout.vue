@@ -39,6 +39,23 @@ const showingNavigationDropdown = ref(false);
                                 >
                                     Dashboard
                                 </NavLink>
+
+                                <!-- Teacher Only Menu -->
+                                <NavLink
+                                    v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                                    :href="route('teacher.dashboard')"
+                                    :active="route().current('teacher.dashboard')"
+                                >
+                                    Courses
+                                </NavLink>
+
+                                <NavLink
+                                    v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                                    :href="route('teacher.students.index')"
+                                    :active="route().current('teacher.students.index')"
+                                >
+                                    Students
+                                </NavLink>
                             </div>
                         </div>
 
@@ -145,6 +162,23 @@ const showingNavigationDropdown = ref(false);
                             :active="route().current('dashboard')"
                         >
                             Dashboard
+                        </ResponsiveNavLink>
+
+                        <!-- Teacher Only Menu (Mobile) -->
+                        <ResponsiveNavLink
+                            v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                            :href="route('teacher.dashboard')"
+                            :active="route().current('teacher.dashboard')"
+                        >
+                            Courses
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                            :href="route('teacher.students.index')"
+                            :active="route().current('teacher.students.index')"
+                        >
+                            Students
                         </ResponsiveNavLink>
                     </div>
 
