@@ -26,4 +26,9 @@ class Course extends Model
     {
         return $this->hasMany(LearningGroup::class);
     }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
+    }
 }

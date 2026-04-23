@@ -1,6 +1,5 @@
 <script setup>
 import { ref } from 'vue';
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
@@ -12,9 +11,9 @@ const showingNavigationDropdown = ref(false);
 
 <template>
     <div>
-        <div class="min-h-screen bg-gray-100">
+        <div class="min-h-screen bg-[#f7f1e8]">
             <nav
-                class="border-b border-gray-100 bg-white"
+                class="border-b border-slate-200 bg-white/90 backdrop-blur"
             >
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -22,10 +21,11 @@ const showingNavigationDropdown = ref(false);
                         <div class="flex">
                             <!-- Logo -->
                             <div class="flex shrink-0 items-center">
-                                <Link :href="route('dashboard')">
-                                    <ApplicationLogo
-                                        class="block h-9 w-auto fill-current text-gray-800"
-                                    />
+                                <Link :href="route('dashboard')" class="inline-flex items-center gap-2">
+                                    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-xs font-black text-[#f7f1e8]">
+                                        EL
+                                    </div>
+                                    <span class="text-sm font-bold tracking-tight text-slate-900">E-Learning</span>
                                 </Link>
                             </div>
 
@@ -34,15 +34,25 @@ const showingNavigationDropdown = ref(false);
                                 class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
                             >
                                 <NavLink
+                                    v-if="$page.props.auth.user.role === 'student'"
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"
                                 >
                                     Dashboard
                                 </NavLink>
 
+                                <!-- Student Menu -->
+                                <NavLink
+                                    v-if="$page.props.auth.user.role === 'student'"
+                                    :href="route('student.courses.index')"
+                                    :active="route().current('student.courses.index')"
+                                >
+                                    Courses
+                                </NavLink>
+
                                 <!-- Teacher Only Menu -->
                                 <NavLink
-                                    v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                                    v-if="$page.props.auth.user.role === 'teacher'"
                                     :href="route('teacher.dashboard')"
                                     :active="route().current('teacher.dashboard')"
                                 >
@@ -50,7 +60,7 @@ const showingNavigationDropdown = ref(false);
                                 </NavLink>
 
                                 <NavLink
-                                    v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                                    v-if="$page.props.auth.user.role === 'teacher'"
                                     :href="route('teacher.students.index')"
                                     :active="route().current('teacher.students.index')"
                                 >
@@ -67,7 +77,7 @@ const showingNavigationDropdown = ref(false);
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium leading-4 text-slate-600 transition duration-150 ease-in-out hover:text-slate-900 focus:outline-none"
                                             >
                                                 {{ $page.props.auth.user.name }}
 
@@ -112,7 +122,7 @@ const showingNavigationDropdown = ref(false);
                                     showingNavigationDropdown =
                                         !showingNavigationDropdown
                                 "
-                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none"
+                                class="inline-flex items-center justify-center rounded-md p-2 text-slate-400 transition duration-150 ease-in-out hover:bg-slate-100 hover:text-slate-600 focus:bg-slate-100 focus:text-slate-600 focus:outline-none"
                             >
                                 <svg
                                     class="h-6 w-6"
@@ -164,9 +174,18 @@ const showingNavigationDropdown = ref(false);
                             Dashboard
                         </ResponsiveNavLink>
 
+                        <!-- Student Menu (Mobile) -->
+                        <ResponsiveNavLink
+                            v-if="$page.props.auth.user.role === 'student'"
+                            :href="route('student.courses.index')"
+                            :active="route().current('student.courses.index')"
+                        >
+                            Courses
+                        </ResponsiveNavLink>
+
                         <!-- Teacher Only Menu (Mobile) -->
                         <ResponsiveNavLink
-                            v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                            v-if="$page.props.auth.user.role === 'teacher'"
                             :href="route('teacher.dashboard')"
                             :active="route().current('teacher.dashboard')"
                         >
@@ -174,7 +193,7 @@ const showingNavigationDropdown = ref(false);
                         </ResponsiveNavLink>
 
                         <ResponsiveNavLink
-                            v-if="$page.props.auth.user.role === 'teacher' || $page.props.auth.user.role === 'super_admin'"
+                            v-if="$page.props.auth.user.role === 'teacher'"
                             :href="route('teacher.students.index')"
                             :active="route().current('teacher.students.index')"
                         >
@@ -184,15 +203,15 @@ const showingNavigationDropdown = ref(false);
 
                     <!-- Responsive Settings Options -->
                     <div
-                        class="border-t border-gray-200 pb-1 pt-4"
+                        class="border-t border-slate-200 pb-1 pt-4"
                     >
                         <div class="px-4">
                             <div
-                                class="text-base font-medium text-gray-800"
+                                class="text-base font-medium text-slate-800"
                             >
                                 {{ $page.props.auth.user.name }}
                             </div>
-                            <div class="text-sm font-medium text-gray-500">
+                            <div class="text-sm font-medium text-slate-500">
                                 {{ $page.props.auth.user.email }}
                             </div>
                         </div>
@@ -215,7 +234,7 @@ const showingNavigationDropdown = ref(false);
 
             <!-- Page Heading -->
             <header
-                class="bg-white shadow"
+                class="border-b border-slate-200 bg-white/70 backdrop-blur"
                 v-if="$slots.header"
             >
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

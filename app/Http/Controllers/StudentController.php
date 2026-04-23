@@ -2,65 +2,296 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Student;
-use App\Http\Requests\StoreStudentRequest;
-use App\Http\Requests\UpdateStudentRequest;
+use App\Models\Course;
+use App\Models\LearningGroup;
+use App\Models\Task;
+use App\Models\TaskAssessment;
+use App\Models\TaskSubmission;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class StudentController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Show student dashboard with task timeline and submission access.
      */
-    public function index()
+    public function dashboard(Request $request): Response
     {
-        //
+        $user = $request->user();
+
+        if (!$user->isStudent()) {
+            return Inertia::render('Dashboard', [
+                'tasks' => [
+                    'ongoing' => [],
+                    'upcoming' => [],
+                    'completed' => [],
+                ],
+            ]);
+        }
+
+        $groups = $user->learningGroups()->with('course')->get();
+        $groupIds = $groups->pluck('id');
+        $courseIds = $groups->pluck('course_id')->unique()->values();
+
+        $submissionsByTask = collect();
+        if ($groupIds->isNotEmpty()) {
+            $submissionsByTask = $user->learningGroups()
+                ->with([
+                    'course.tasks.submissions' => function ($query) use ($groupIds) {
+                        $query->whereIn('learning_group_id', $groupIds)->with('submittedBy');
+                    },
+                ])
+                ->get()
+                ->flatMap(function ($group) {
+                    return $group->course?->tasks ?? [];
+                })
+                ->flatMap(function ($task) {
+                    return $task->submissions;
+                })
+                ->groupBy('task_id')
+                ->map(function ($submissions) {
+                    return $submissions->sortBy('created_at')->values();
+                });
+        }
+
+        $tasks = Task::query()
+            ->whereIn('course_id', $courseIds)
+            ->with('course:id,title')
+            ->get()
+            ->map(function (Task $task) use ($submissionsByTask, $groups, $user) {
+                $now = now();
+                $startsAt = $task->start_date;
+                $deadline = $task->deadline;
+
+                $isUpcoming = $startsAt && $startsAt->gt($now);
+                $isCompleted = $deadline && $deadline->lt($now);
+                $isOngoing = !$isUpcoming && !$isCompleted;
+
+                $learningGroup = $groups->firstWhere('course_id', $task->course_id);
+                $pivotRole = $learningGroup?->pivot?->role;
+                $isLeader = $pivotRole === 'leader';
+                $taskSubmissions = $submissionsByTask->get($task->id, collect());
+                $firstSubmission = $taskSubmissions->firstWhere('submission_label', TaskSubmission::LABEL_FIRST_SUBMIT);
+                $finalSubmission = $taskSubmissions->firstWhere('submission_label', TaskSubmission::LABEL_FINAL_SUBMIT);
+                $existingSubmission = $finalSubmission ?? $taskSubmissions->last();
+                $courseGroups = LearningGroup::where('course_id', $task->course_id)
+                    ->get(['id', 'name'])
+                    ->map(function ($group) {
+                        return [
+                            'id' => $group->id,
+                            'name' => $group->name,
+                        ];
+                    });
+
+                $assessmentStatuses = TaskAssessment::where('task_id', $task->id)
+                    ->where('assessor_group_id', $learningGroup?->id)
+                    ->get()
+                    ->map(function ($assessment) {
+                        return [
+                            'assessment_scope' => $assessment->assessment_scope,
+                            'assessment_type' => $assessment->assessment_type,
+                            'target_group_id' => $assessment->target_group_id,
+                            'total_score' => $assessment->total_score,
+                            'average_score' => $assessment->average_score,
+                            'created_at' => $assessment->created_at,
+                        ];
+                    })
+                    ->values();
+
+                $mapAssessmentDetail = function (TaskAssessment $assessment) {
+                    $scores = $assessment->rubric_scores;
+                    if (!is_array($scores) || count($scores) === 0) {
+                        $scores = [
+                            $assessment->score_1,
+                            $assessment->score_2,
+                            $assessment->score_3,
+                        ];
+                    }
+
+                    $comments = $assessment->rubric_comments;
+                    if (!is_array($comments)) {
+                        $comments = [
+                            $assessment->comment_1,
+                            $assessment->comment_2,
+                            $assessment->comment_3,
+                        ];
+                    }
+
+                    return [
+                        'id' => $assessment->id,
+                        'assessment_scope' => $assessment->assessment_scope,
+                        'assessment_type' => $assessment->assessment_type,
+                        'assessment_date' => $assessment->assessment_date,
+                        'class_name' => $assessment->class_name,
+                        'assessor_name' => $assessment->assessor_name,
+                        'assessor_group' => [
+                            'id' => $assessment->assessorGroup?->id,
+                            'name' => $assessment->assessorGroup?->name,
+                        ],
+                        'target_group' => [
+                            'id' => $assessment->targetGroup?->id,
+                            'name' => $assessment->targetGroup?->name,
+                        ],
+                        'scores' => array_values($scores),
+                        'comments' => array_values($comments),
+                        'total_score' => $assessment->total_score,
+                        'average_score' => $assessment->average_score,
+                    ];
+                };
+
+                $submittedAssessments = TaskAssessment::with(['assessorGroup:id,name', 'targetGroup:id,name'])
+                    ->where('task_id', $task->id)
+                    ->where('assessor_group_id', $learningGroup?->id)
+                    ->get()
+                    ->map($mapAssessmentDetail)
+                    ->values();
+
+                $receivedPeerAssessments = TaskAssessment::with(['assessorGroup:id,name', 'targetGroup:id,name'])
+                    ->where('task_id', $task->id)
+                    ->where('target_group_id', $learningGroup?->id)
+                    ->where('assessment_scope', TaskAssessment::SCOPE_PEER_GROUP)
+                    ->where('assessor_group_id', '!=', $learningGroup?->id)
+                    ->get()
+                    ->map($mapAssessmentDetail)
+                    ->values();
+
+                $receivedTeacherAssessments = TaskAssessment::with(['assessorGroup:id,name', 'targetGroup:id,name'])
+                    ->where('task_id', $task->id)
+                    ->where('target_group_id', $learningGroup?->id)
+                    ->where('assessment_scope', TaskAssessment::SCOPE_TEACHER)
+                    ->get()
+                    ->map($mapAssessmentDetail)
+                    ->values();
+
+                $mapSubmission = function ($submission) {
+                    if (!$submission) {
+                        return null;
+                    }
+
+                    return [
+                        'id' => $submission->id,
+                        'submission_label' => $submission->submission_label,
+                        'description' => $submission->description,
+                        'file_path' => $submission->file_path,
+                        'file_name' => $submission->file_path ? basename($submission->file_path) : null,
+                        'status' => $submission->status,
+                        'teacher_notes' => $submission->teacher_notes,
+                        'submitted_by' => [
+                            'id' => $submission->submittedBy?->id,
+                            'name' => $submission->submittedBy?->name,
+                        ],
+                        'updated_at' => $submission->updated_at,
+                    ];
+                };
+
+                return [
+                    'id' => $task->id,
+                    'label' => $task->label,
+                    'title' => $task->title,
+                    'description' => $task->description,
+                    'file_path' => $task->file_path,
+                    'start_date' => $task->start_date,
+                    'deadline' => $task->deadline,
+                    'course' => [
+                        'id' => $task->course?->id,
+                        'title' => $task->course?->title,
+                    ],
+                    'status_group' => $isUpcoming ? 'upcoming' : ($isCompleted ? 'completed' : 'ongoing'),
+                    'can_access' => !$isUpcoming,
+                    'can_submit' => $isOngoing && $isLeader && !$finalSubmission,
+                    'is_leader' => $isLeader,
+                    'submission_attempts' => $taskSubmissions->count(),
+                    'is_final_submission_stage' => $isOngoing && $isLeader && $firstSubmission && !$finalSubmission,
+                    'learning_group' => $learningGroup ? [
+                        'id' => $learningGroup->id,
+                        'name' => $learningGroup->name,
+                    ] : null,
+                    'course_groups' => $courseGroups,
+                    'assessor_name' => $learningGroup ? ($user->name.' - '.$learningGroup->name) : null,
+                    'assessment_statuses' => $assessmentStatuses,
+                    'submitted_assessments' => $submittedAssessments,
+                    'received_peer_assessments' => $receivedPeerAssessments,
+                    'received_teacher_assessments' => $receivedTeacherAssessments,
+                    'existing_submission' => $mapSubmission($existingSubmission),
+                    'first_submission' => $mapSubmission($firstSubmission),
+                    'final_submission' => $mapSubmission($finalSubmission),
+                ];
+            });
+
+        return Inertia::render('Dashboard', [
+            'tasks' => [
+                'ongoing' => $tasks->where('status_group', 'ongoing')->sortBy('deadline')->values(),
+                'upcoming' => $tasks->where('status_group', 'upcoming')->sortBy('start_date')->values(),
+                'completed' => $tasks->where('status_group', 'completed')->sortByDesc('deadline')->values(),
+            ],
+        ]);
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Show all courses a student is enrolled in
      */
-    public function create()
+    public function indexCourses(Request $request): Response
     {
-        //
+        $user = $request->user();
+
+        // Get unique courses from learning groups where user is a member
+        $courses = Course::whereHas('learningGroups.members', function ($query) use ($user) {
+            $query->where('users.id', $user->id);
+        })
+            ->with([
+                'teacher:id,name',
+                'learningGroups' => function ($query) use ($user) {
+                    $query->whereHas('members', function ($memberQuery) use ($user) {
+                        $memberQuery->where('users.id', $user->id);
+                    });
+                },
+            ])
+            ->withCount('learningGroups')
+            ->get();
+
+        return Inertia::render('Student/Courses', [
+            'courses' => $courses,
+        ]);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Show course detail with learning groups and members
      */
-    public function store(StoreStudentRequest $request)
+    public function showCourse(Request $request, Course $course): Response
     {
-        //
-    }
+        $user = $request->user();
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Student $student)
-    {
-        //
-    }
+        // Check if student is enrolled in this course
+        $isEnrolled = $course->learningGroups()
+            ->whereHas('members', function ($query) use ($user) {
+                $query->where('users.id', $user->id);
+            })
+            ->exists();
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Student $student)
-    {
-        //
-    }
+        if (!$isEnrolled) {
+            abort(403, 'You are not enrolled in this course');
+        }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdateStudentRequest $request, Student $student)
-    {
-        //
-    }
+        $course->load([
+            'teacher:id,name',
+            'learningGroups' => function ($query) use ($user) {
+                $query->with([
+                    'members' => function ($memberQuery) {
+                        $memberQuery->select('users.id', 'name', 'username');
+                    }
+                ])->whereHas('members', function ($memberQuery) use ($user) {
+                    $memberQuery->where('users.id', $user->id);
+                });
+            },
+            'tasks' => function ($query) {
+                $query->latest();
+            },
+        ]);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Student $student)
-    {
-        //
+        return Inertia::render('Student/CourseDetail', [
+            'course' => $course,
+        ]);
     }
 }
+

@@ -35,14 +35,19 @@ const submit = () => {
     <GuestLayout>
         <Head title="Reset Password" />
 
-        <form @submit.prevent="submit">
+        <div class="mb-6">
+            <h2 class="text-2xl font-black tracking-tight text-slate-900">Atur Ulang Password</h2>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Masukkan password baru untuk akunmu.</p>
+        </div>
+
+        <form class="space-y-4" @submit.prevent="submit">
             <div>
                 <InputLabel for="email" value="Email" />
 
                 <TextInput
                     id="email"
                     type="email"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full rounded-xl border-slate-300 bg-white/90"
                     v-model="form.email"
                     required
                     autofocus
@@ -52,13 +57,13 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.email" />
             </div>
 
-            <div class="mt-4">
+            <div>
                 <InputLabel for="password" value="Password" />
 
                 <TextInput
                     id="password"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full rounded-xl border-slate-300 bg-white/90"
                     v-model="form.password"
                     required
                     autocomplete="new-password"
@@ -67,16 +72,16 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
-            <div class="mt-4">
+            <div>
                 <InputLabel
                     for="password_confirmation"
-                    value="Confirm Password"
+                    value="Konfirmasi Password"
                 />
 
                 <TextInput
                     id="password_confirmation"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full rounded-xl border-slate-300 bg-white/90"
                     v-model="form.password_confirmation"
                     required
                     autocomplete="new-password"
@@ -88,12 +93,12 @@ const submit = () => {
                 />
             </div>
 
-            <div class="mt-4 flex items-center justify-end">
+            <div class="flex items-center justify-end pt-2">
                 <PrimaryButton
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
-                    Reset Password
+                    Simpan Password Baru
                 </PrimaryButton>
             </div>
         </form>

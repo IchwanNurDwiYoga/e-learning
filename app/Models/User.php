@@ -99,7 +99,7 @@ class User extends Authenticatable
 
     public function learningGroups()
     {
-        return $this->belongsToMany(LearningGroup::class)
+        return $this->belongsToMany(LearningGroup::class, 'learning_group_members', 'user_id', 'learning_group_id')
             ->withPivot('role')
             ->withTimestamps();
     }

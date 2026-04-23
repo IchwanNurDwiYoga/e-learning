@@ -26,10 +26,47 @@ class TeacherController extends Controller
 
         $courses = Course::where('teacher_id', $teacher->id)
             ->withCount('learningGroups')
+            ->with([
+                'tasks' => function ($query) {
+                    $query->with(['submissions.learningGroup:id,name,course_id'])
+                        ->latest();
+                },
+            ])
             ->get();
+
+        $courseTaskProgress = $courses->map(function ($course) {
+            return [
+                'id' => $course->id,
+                'title' => $course->title,
+                'learning_groups_count' => $course->learning_groups_count,
+                'tasks' => $course->tasks->map(function ($task) {
+                    $submittedGroups = $task->submissions
+                        ->pluck('learningGroup')
+                        ->filter()
+                        ->unique('id')
+                        ->values()
+                        ->map(function ($group) {
+                            return [
+                                'id' => $group->id,
+                                'name' => $group->name,
+                            ];
+                        });
+
+                    return [
+                        'id' => $task->id,
+                        'title' => $task->title,
+                        'start_date' => $task->start_date,
+                        'deadline' => $task->deadline,
+                        'submitted_groups_count' => $submittedGroups->count(),
+                        'submitted_groups' => $submittedGroups,
+                    ];
+                })->values(),
+            ];
+        })->values();
 
         return Inertia::render('Teacher/Dashboard', [
             'courses' => $courses,
+            'courseTaskProgress' => $courseTaskProgress,
         ]);
     }
 
@@ -49,6 +86,9 @@ class TeacherController extends Controller
                         $memberQuery->select('users.id', 'name', 'username');
                     }
                 ]);
+            },
+            'tasks' => function ($query) {
+                $query->latest()->get();
             }
         ]);
 
