@@ -68,7 +68,7 @@ const submitForm = () => {
                             </div>
 
                             <div>
-                                <InputLabel for="username" value="Username (NIP)" />
+                                <InputLabel for="username" value="Username (NIS/NISN)" />
                                 <TextInput
                                     id="username"
                                     type="text"
