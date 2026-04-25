@@ -37,7 +37,7 @@ defineProps({
                     </div>
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.28em] text-teal-800">Platform Pembelajaran</p>
-                        <h1 class="text-lg font-black tracking-tight text-slate-900">E-Learning Biologi</h1>
+                        <h1 class="text-lg font-black tracking-tight text-slate-900">E-Learning</h1>
                     </div>
                 </div>
 
@@ -81,7 +81,7 @@ defineProps({
                         </h2>
 
                         <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-                            Kelola pembelajaran biologi dengan alur yang rapi: teacher membagikan task, student mengirim first dan final submission, lalu asesmen diri, peer, dan guru tercatat dalam satu sistem.
+                            Kelola pembelajaran dengan alur yang rapi: teacher membagikan task, student mengirim first dan final submission, lalu asesmen diri, peer, dan guru tercatat dalam satu sistem.
                         </p>
 
                         <div class="mt-8 flex flex-wrap gap-4">
@@ -190,7 +190,7 @@ defineProps({
 
             <footer class="border-t border-slate-300/60 py-6 text-sm text-slate-500">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p>E-Learning Biologi untuk manajemen task, submission, dan asesmen kelompok.</p>
+                    <p>E-Learning untuk manajemen task, submission, dan asesmen kelompok.</p>
                     <p>Laravel v{{ laravelVersion }} · PHP v{{ phpVersion }}</p>
                 </div>
             </footer>

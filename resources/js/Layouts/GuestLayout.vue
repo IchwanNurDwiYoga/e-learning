@@ -18,7 +18,6 @@ import { Link } from '@inertiajs/vue3';
                     </div>
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.22em] text-teal-800">E-Learning</p>
-                        <p class="text-sm font-bold text-slate-900">Biologi</p>
                     </div>
                 </Link>
                 <Link href="/" class="text-sm font-semibold text-slate-600 transition hover:text-slate-900">
