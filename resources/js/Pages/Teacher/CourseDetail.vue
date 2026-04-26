@@ -19,6 +19,17 @@ const props = defineProps({
 });
 
 const showGroupModal = ref(false);
+const alertModal = ref({
+    open: false,
+    title: '',
+    message: '',
+});
+const removeConfirmModal = ref({
+    open: false,
+    groupId: null,
+    userId: null,
+    memberName: '',
+});
 const expandedGroups = ref({});
 const courseGroups = computed(() => props.course.learningGroups ?? props.course.learning_groups ?? []);
 const courseTasks = computed(() => props.course.tasks ?? []);
@@ -54,7 +65,11 @@ const submitStudent = (groupId) => {
     const form = getStudentForm(groupId);
 
     if (!form.existing_student_id) {
-        alert('Please select a student');
+        alertModal.value = {
+            open: true,
+            title: 'Pilih Student Dulu',
+            message: 'Silakan pilih student sebelum menambahkan ke group.',
+        };
         return;
     }
 
@@ -64,7 +79,11 @@ const submitStudent = (groupId) => {
             form.existing_student_id = '';
         },
         onError: (errors) => {
-            alert('Error: ' + (errors.existing_student_id || 'Failed to add student'));
+            alertModal.value = {
+                open: true,
+                title: 'Gagal Menambahkan Student',
+                message: errors.existing_student_id || 'Terjadi kesalahan saat menambahkan student ke group.',
+            };
         },
     });
 };
@@ -97,7 +116,19 @@ const removingMember = ref(null);
 
 const removeMember = (groupId, userId, memberName) => {
     if (removingMember.value) return;
-    if (!confirm(`Hapus ${memberName} dari grup ini?`)) return;
+    removeConfirmModal.value = {
+        open: true,
+        groupId,
+        userId,
+        memberName,
+    };
+};
+
+const confirmRemoveMember = () => {
+    const { groupId, userId } = removeConfirmModal.value;
+    if (!groupId || !userId || removingMember.value) return;
+
+    removeConfirmModal.value.open = false;
     removingMember.value = { groupId, userId };
     router.delete(route('teacher.learning-groups.members.destroy', { learningGroup: groupId, user: userId }), {
         preserveScroll: true,
@@ -365,6 +396,51 @@ const formatDate = (dateString) => {
                         <PrimaryButton type="submit">Create Group</PrimaryButton>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Alert Modal -->
+        <div v-if="alertModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+            <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                <h3 class="text-lg font-semibold text-gray-900">{{ alertModal.title }}</h3>
+                <p class="mt-2 text-sm text-gray-600">{{ alertModal.message }}</p>
+
+                <div class="mt-6 flex items-center justify-end">
+                    <button
+                        type="button"
+                        class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                        @click="alertModal.open = false"
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Remove Member Confirm Modal -->
+        <div v-if="removeConfirmModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+            <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                <h3 class="text-lg font-semibold text-gray-900">Konfirmasi Hapus Member</h3>
+                <p class="mt-2 text-sm text-gray-600">
+                    Hapus <span class="font-semibold text-gray-900">{{ removeConfirmModal.memberName }}</span> dari group ini?
+                </p>
+
+                <div class="mt-6 flex items-center justify-end gap-3">
+                    <button
+                        type="button"
+                        class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        @click="removeConfirmModal.open = false"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                        @click="confirmRemoveMember"
+                    >
+                        Ya, Hapus
+                    </button>
+                </div>
             </div>
         </div>
     </AuthenticatedLayout>
