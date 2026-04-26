@@ -28,6 +28,7 @@ class TaskAssessmentController extends Controller
 
         $validated = $request->validate([
             'assessment_type' => ['required', Rule::in([TaskAssessment::TYPE_TASK, TaskAssessment::TYPE_PRODUCT, TaskAssessment::TYPE_PRODUCT_PRESENTATION])],
+            'submission_stage' => ['required', Rule::in([TaskAssessment::STAGE_FIRST_SUBMIT, TaskAssessment::STAGE_FINAL_SUBMIT])],
             'target_group_id' => ['required', 'integer', 'exists:learning_groups,id'],
             'scores' => ['required', 'array', 'min:1'],
             'scores.*' => ['required', 'integer', 'between:1,4'],
@@ -46,20 +47,22 @@ class TaskAssessmentController extends Controller
             return redirect()->back()->with('error', 'Kelompok tujuan asesmen tidak valid untuk course ini.');
         }
 
-        // Check group has final submission
+        // Check group has the required submission stage
         if (!$task->submissions()
             ->where('learning_group_id', $targetGroup->id)
-            ->where('submission_label', 'final_submit')
+            ->where('submission_label', $validated['submission_stage'])
             ->exists()) {
-            return redirect()->back()->with('error', 'Asesmen hanya bisa diisi setelah kelompok melakukan final submission.');
+            $stageLabel = $validated['submission_stage'] === TaskAssessment::STAGE_FIRST_SUBMIT ? 'first submission' : 'final submission';
+            return redirect()->back()->with('error', "Asesmen hanya bisa diisi setelah kelompok melakukan {$stageLabel}.");
         }
 
-        // One-time per teacher per group per type
+        // One-time per teacher per group per type per stage
         $alreadySubmitted = TaskAssessment::where('task_id', $task->id)
             ->where('assessor_id', $teacher->id)
             ->where('target_group_id', $targetGroup->id)
             ->where('assessment_scope', TaskAssessment::SCOPE_TEACHER)
             ->where('assessment_type', $validated['assessment_type'])
+            ->where('submission_stage', $validated['submission_stage'])
             ->exists();
 
         if ($alreadySubmitted) {
@@ -79,6 +82,7 @@ class TaskAssessmentController extends Controller
             'target_group_id' => $targetGroup->id,
             'assessment_scope' => TaskAssessment::SCOPE_TEACHER,
             'assessment_type' => $validated['assessment_type'],
+            'submission_stage' => $validated['submission_stage'],
             'assessment_date' => now()->toDateString(),
             'class_name' => $task->course?->title ?? '-',
             'assessor_name' => $teacher->name.' (Guru)',
@@ -119,16 +123,10 @@ class TaskAssessmentController extends Controller
             return redirect()->back()->with('error', 'Anda tidak terdaftar pada kelompok untuk course ini.');
         }
 
-        if (!$task->submissions()
-            ->where('learning_group_id', $assessorGroup->id)
-            ->where('submission_label', 'final_submit')
-            ->exists()) {
-            return redirect()->back()->with('error', 'Asesmen hanya bisa diisi setelah final submission.');
-        }
-
         $validated = $request->validate([
             'assessment_scope' => ['required', Rule::in([TaskAssessment::SCOPE_PERSONAL_GROUP, TaskAssessment::SCOPE_PEER_GROUP])],
             'assessment_type' => ['required', Rule::in([TaskAssessment::TYPE_TASK, TaskAssessment::TYPE_PRODUCT, TaskAssessment::TYPE_PRODUCT_PRESENTATION])],
+            'submission_stage' => ['required', Rule::in([TaskAssessment::STAGE_FIRST_SUBMIT, TaskAssessment::STAGE_FINAL_SUBMIT])],
             'target_group_id' => ['required', 'integer', 'exists:learning_groups,id'],
             'scores' => ['required', 'array', 'min:1'],
             'scores.*' => ['required', 'integer', 'between:1,4'],
@@ -138,6 +136,14 @@ class TaskAssessmentController extends Controller
         ], [
             'confirm_irreversible.accepted' => 'Konfirmasi wajib disetujui karena asesmen hanya bisa dikirim sekali.',
         ]);
+
+        if (!$task->submissions()
+            ->where('learning_group_id', $assessorGroup->id)
+            ->where('submission_label', $validated['submission_stage'])
+            ->exists()) {
+            $stageLabel = $validated['submission_stage'] === TaskAssessment::STAGE_FIRST_SUBMIT ? 'first submission' : 'final submission';
+            return redirect()->back()->with('error', "Asesmen hanya bisa diisi setelah {$stageLabel}.");
+        }
 
         $targetGroup = LearningGroup::where('id', $validated['target_group_id'])
             ->where('course_id', $task->course_id)
@@ -159,6 +165,7 @@ class TaskAssessmentController extends Controller
             ->where('assessor_group_id', $assessorGroup->id)
             ->where('assessment_scope', $validated['assessment_scope'])
             ->where('assessment_type', $validated['assessment_type'])
+            ->where('submission_stage', $validated['submission_stage'])
             ->exists();
 
         if ($alreadySubmitted) {
@@ -178,6 +185,7 @@ class TaskAssessmentController extends Controller
             'target_group_id' => $targetGroup->id,
             'assessment_scope' => $validated['assessment_scope'],
             'assessment_type' => $validated['assessment_type'],
+            'submission_stage' => $validated['submission_stage'],
             'assessment_date' => now()->toDateString(),
             'class_name' => $task->course?->title ?? '-',
             'assessor_name' => $user->name.' - '.$assessorGroup->name,

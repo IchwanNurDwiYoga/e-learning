@@ -573,17 +573,18 @@ const submissionStageLabel = (submissionLabel) => {
     return 'First Submission';
 };
 
-const getAssessmentKey = (taskId, scope, type) => {
-    return `${taskId}-${scope}-${type}`;
+const getAssessmentKey = (taskId, scope, type, stage) => {
+    return `${taskId}-${scope}-${type}-${stage}`;
 };
 
-const getAssessmentForm = (taskId, scope, type) => {
-    const key = getAssessmentKey(taskId, scope, type);
+const getAssessmentForm = (taskId, scope, type, stage) => {
+    const key = getAssessmentKey(taskId, scope, type, stage);
 
     if (!assessmentForms.value[key]) {
         const initialState = {
             assessment_scope: scope,
             assessment_type: type,
+            submission_stage: stage,
             target_group_id: '',
             confirm_irreversible: false,
         };
@@ -602,46 +603,47 @@ const getAssessmentForm = (taskId, scope, type) => {
     return assessmentForms.value[key];
 };
 
-const getAssessmentStatus = (task, scope, type) => {
+const getAssessmentStatus = (task, scope, type, stage) => {
     return (task.assessment_statuses || []).find((assessment) => {
-        return assessment.assessment_scope === scope && assessment.assessment_type === type;
+        return assessment.assessment_scope === scope && assessment.assessment_type === type && assessment.submission_stage === stage;
     }) || null;
 };
 
-const getSubmittedAssessment = (task, scope, type) => {
+const getSubmittedAssessment = (task, scope, type, stage) => {
     return (task.submitted_assessments || []).find((assessment) => {
-        return assessment.assessment_scope === scope && assessment.assessment_type === type;
+        return assessment.assessment_scope === scope && assessment.assessment_type === type && assessment.submission_stage === stage;
     }) || null;
 };
 
-const getReceivedPeerAssessments = (task, type) => {
+const getReceivedPeerAssessments = (task, type, stage) => {
     return (task.received_peer_assessments || []).filter((assessment) => {
-        return assessment.assessment_type === type;
+        return assessment.assessment_type === type && assessment.submission_stage === stage;
     });
 };
 
-const getReceivedTeacherAssessments = (task, type) => {
+const getReceivedTeacherAssessments = (task, type, stage) => {
     return (task.received_teacher_assessments || []).filter((assessment) => {
-        return assessment.assessment_type === type;
+        return assessment.assessment_type === type && assessment.submission_stage === stage;
     });
 };
 
-const hasAssessmentSubmitted = (task, scope, type) => {
-    return Boolean(getAssessmentStatus(task, scope, type));
+const hasAssessmentSubmitted = (task, scope, type, stage) => {
+    return Boolean(getAssessmentStatus(task, scope, type, stage));
 };
 
 const hasPeerGroupOptions = (task) => {
     return (task.course_groups || []).some((group) => group.id !== task.learning_group?.id);
 };
 
-const openAssessmentModal = (task, scope, type) => {
-    if (hasAssessmentSubmitted(task, scope, type)) {
+const openAssessmentModal = (task, scope, type, stage) => {
+    if (hasAssessmentSubmitted(task, scope, type, stage)) {
         return;
     }
 
-    const form = getAssessmentForm(task.id, scope, type);
+    const form = getAssessmentForm(task.id, scope, type, stage);
     form.assessment_scope = scope;
     form.assessment_type = type;
+    form.submission_stage = stage;
 
     if (scope === 'personal_group') {
         form.target_group_id = task.learning_group?.id || '';
@@ -654,6 +656,7 @@ const openAssessmentModal = (task, scope, type) => {
         taskId: task.id,
         scope,
         type,
+        stage,
     };
 };
 
@@ -661,16 +664,16 @@ const closeAssessmentModal = () => {
     assessmentModal.value = null;
 };
 
-const openAssessmentResultModal = (task, scope, type, mode) => {
+const openAssessmentResultModal = (task, scope, type, mode, stage) => {
     let results = [];
 
     if (mode === 'submitted') {
-        const submitted = getSubmittedAssessment(task, scope, type);
+        const submitted = getSubmittedAssessment(task, scope, type, stage);
         results = submitted ? [submitted] : [];
     } else if (mode === 'received_peer') {
-        results = getReceivedPeerAssessments(task, type);
+        results = getReceivedPeerAssessments(task, type, stage);
     } else if (mode === 'received_teacher') {
-        results = getReceivedTeacherAssessments(task, type);
+        results = getReceivedTeacherAssessments(task, type, stage);
     }
 
     assessmentResultModal.value = {
@@ -678,6 +681,7 @@ const openAssessmentResultModal = (task, scope, type, mode) => {
         scope,
         type,
         mode,
+        stage,
         results,
     };
 };
@@ -823,6 +827,7 @@ const currentAssessmentForm = computed(() => {
         assessmentModal.value.taskId,
         assessmentModal.value.scope,
         assessmentModal.value.type,
+        assessmentModal.value.stage,
     );
 });
 
@@ -1016,11 +1021,11 @@ onBeforeUnmount(() => {
 
         <div class="py-12">
             <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
-                <div v-if="flashSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div v-if="flashSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
                     {{ flashSuccess }}
                 </div>
 
-                <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
                     {{ flashError }}
                 </div>
 
@@ -1127,97 +1132,196 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div v-if="task.final_submission" class="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                                <h6 class="text-sm font-semibold text-blue-900">Asesmen Setelah Final Submission</h6>
-                                <p class="mt-1 text-xs text-blue-800">Setiap asesmen hanya bisa dikirim sekali dan tidak dapat diubah.</p>
+                            <template v-if="task.first_submission">
+                                <!-- ── Asesmen First Submission ──────────────────── -->
+                                <div class="rounded-lg border border-slate-300 bg-slate-50 p-4">
+                                    <h6 class="text-sm font-semibold text-slate-900">Asesmen First Submission</h6>
+                                    <p class="mt-1 text-xs text-slate-700">Setiap asesmen hanya bisa dikirim sekali dan tidak dapat diubah.</p>
 
-                                <div class="mt-3 overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-blue-200 rounded-md border border-blue-200 bg-white text-sm">
-                                        <thead class="bg-blue-100">
-                                            <tr>
-                                                <th class="px-4 py-2 text-left font-semibold text-blue-900">Jenis Asesmen</th>
-                                                <th class="px-4 py-2 text-left font-semibold text-blue-900">Penilaian Pribadi (Kelompok)</th>
-                                                <th class="px-4 py-2 text-left font-semibold text-blue-900">Penilaian Teman Sebaya (Kelompok)</th>
-                                                <th class="px-4 py-2 text-left font-semibold text-blue-900">Asesmen Guru</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-blue-100 text-gray-700">
-                                            <tr v-for="(item, idx) in assessmentItems" :key="`${task.id}-${item.type}`">
-                                                <td class="px-4 py-2">{{ idx + 1 }}. {{ item.label }}</td>
-                                                <td class="px-4 py-2">
-                                                    <button
-                                                        type="button"
-                                                        class="rounded-md border px-3 py-1.5 text-xs font-semibold"
-                                                        :class="hasAssessmentSubmitted(task, 'personal_group', item.type)
-                                                            ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-600'
-                                                            : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50'"
-                                                        :disabled="hasAssessmentSubmitted(task, 'personal_group', item.type)"
-                                                        @click="openAssessmentModal(task, 'personal_group', item.type)"
-                                                    >
-                                                        <span v-if="hasAssessmentSubmitted(task, 'personal_group', item.type)">
-                                                            Terkirim (Total {{ getAssessmentStatus(task, 'personal_group', item.type)?.total_score }}, Rata-rata {{ getAssessmentStatus(task, 'personal_group', item.type)?.average_score }})
-                                                        </span>
-                                                        <span v-else>Isi Asesmen</span>
-                                                    </button>
-                                                    <button
-                                                        v-if="hasAssessmentSubmitted(task, 'personal_group', item.type)"
-                                                        type="button"
-                                                        class="mt-2 block rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                                                        @click="openAssessmentResultModal(task, 'personal_group', item.type, 'submitted')"
-                                                    >
-                                                        Lihat Hasil
-                                                    </button>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <button
-                                                        type="button"
-                                                        class="rounded-md border px-3 py-1.5 text-xs font-semibold"
-                                                        :class="hasAssessmentSubmitted(task, 'peer_group', item.type)
-                                                            ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-600'
-                                                            : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50'"
-                                                        :disabled="hasAssessmentSubmitted(task, 'peer_group', item.type)"
-                                                        @click="openAssessmentModal(task, 'peer_group', item.type)"
-                                                    >
-                                                        <span v-if="hasAssessmentSubmitted(task, 'peer_group', item.type)">
-                                                            Terkirim (Total {{ getAssessmentStatus(task, 'peer_group', item.type)?.total_score }}, Rata-rata {{ getAssessmentStatus(task, 'peer_group', item.type)?.average_score }})
-                                                        </span>
-                                                        <span v-else>Isi Asesmen</span>
-                                                    </button>
-                                                    <div class="mt-2 flex flex-wrap gap-2">
+                                    <div class="mt-3 overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-slate-200 rounded-md border border-slate-200 bg-white text-sm">
+                                            <thead class="bg-slate-100">
+                                                <tr>
+                                                    <th class="px-4 py-2 text-left font-semibold text-slate-900">Jenis Asesmen</th>
+                                                    <th class="px-4 py-2 text-left font-semibold text-slate-900">Penilaian Pribadi (Kelompok)</th>
+                                                    <th class="px-4 py-2 text-left font-semibold text-slate-900">Penilaian Teman Sebaya (Kelompok)</th>
+                                                    <th class="px-4 py-2 text-left font-semibold text-slate-900">Asesmen Guru</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100 text-gray-700">
+                                                <tr v-for="(item, idx) in assessmentItems" :key="`${task.id}-first-${item.type}`">
+                                                    <td class="px-4 py-2">{{ idx + 1 }}. {{ item.label }}</td>
+                                                    <td class="px-4 py-2">
                                                         <button
-                                                            v-if="hasAssessmentSubmitted(task, 'peer_group', item.type)"
                                                             type="button"
-                                                            class="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                                                            @click="openAssessmentResultModal(task, 'peer_group', item.type, 'submitted')"
+                                                            class="rounded-md border px-3 py-1.5 text-xs font-semibold"
+                                                            :class="hasAssessmentSubmitted(task, 'personal_group', item.type, 'first_submit')
+                                                                ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-600'
+                                                                : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50'"
+                                                            :disabled="hasAssessmentSubmitted(task, 'personal_group', item.type, 'first_submit')"
+                                                            @click="openAssessmentModal(task, 'personal_group', item.type, 'first_submit')"
                                                         >
-                                                            Lihat Hasil Saya
+                                                            <span v-if="hasAssessmentSubmitted(task, 'personal_group', item.type, 'first_submit')">
+                                                                Terkirim (Total {{ getAssessmentStatus(task, 'personal_group', item.type, 'first_submit')?.total_score }}, Rata-rata {{ getAssessmentStatus(task, 'personal_group', item.type, 'first_submit')?.average_score }})
+                                                            </span>
+                                                            <span v-else>Isi Asesmen</span>
                                                         </button>
                                                         <button
-                                                            v-if="getReceivedPeerAssessments(task, item.type).length > 0"
+                                                            v-if="hasAssessmentSubmitted(task, 'personal_group', item.type, 'first_submit')"
                                                             type="button"
-                                                            class="rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50"
-                                                            @click="openAssessmentResultModal(task, 'peer_group', item.type, 'received_peer')"
+                                                            class="mt-2 block rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                            @click="openAssessmentResultModal(task, 'personal_group', item.type, 'submitted', 'first_submit')"
                                                         >
-                                                            Lihat Hasil Peer ke Kelompok Saya
+                                                            Lihat Hasil
                                                         </button>
-                                                    </div>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <button
-                                                        v-if="getReceivedTeacherAssessments(task, item.type).length > 0"
-                                                        type="button"
-                                                        class="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
-                                                        @click="openAssessmentResultModal(task, 'teacher', item.type, 'received_teacher')"
-                                                    >
-                                                        Lihat Hasil Guru
-                                                    </button>
-                                                    <span v-else class="text-xs text-gray-500">Belum ada hasil</span>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
+                                                    </td>
+                                                    <td class="px-4 py-2">
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-md border px-3 py-1.5 text-xs font-semibold"
+                                                            :class="hasAssessmentSubmitted(task, 'peer_group', item.type, 'first_submit')
+                                                                ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-600'
+                                                                : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50'"
+                                                            :disabled="hasAssessmentSubmitted(task, 'peer_group', item.type, 'first_submit')"
+                                                            @click="openAssessmentModal(task, 'peer_group', item.type, 'first_submit')"
+                                                        >
+                                                            <span v-if="hasAssessmentSubmitted(task, 'peer_group', item.type, 'first_submit')">
+                                                                Terkirim (Total {{ getAssessmentStatus(task, 'peer_group', item.type, 'first_submit')?.total_score }}, Rata-rata {{ getAssessmentStatus(task, 'peer_group', item.type, 'first_submit')?.average_score }})
+                                                            </span>
+                                                            <span v-else>Isi Asesmen</span>
+                                                        </button>
+                                                        <div class="mt-2 flex flex-wrap gap-2">
+                                                            <button
+                                                                v-if="hasAssessmentSubmitted(task, 'peer_group', item.type, 'first_submit')"
+                                                                type="button"
+                                                                class="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                                @click="openAssessmentResultModal(task, 'peer_group', item.type, 'submitted', 'first_submit')"
+                                                            >
+                                                                Lihat Hasil Saya
+                                                            </button>
+                                                            <button
+                                                                v-if="getReceivedPeerAssessments(task, item.type, 'first_submit').length > 0"
+                                                                type="button"
+                                                                class="rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                                                                @click="openAssessmentResultModal(task, 'peer_group', item.type, 'received_peer', 'first_submit')"
+                                                            >
+                                                                Lihat Hasil Peer ke Kelompok Saya
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                    <td class="px-4 py-2">
+                                                        <button
+                                                            v-if="getReceivedTeacherAssessments(task, item.type, 'first_submit').length > 0"
+                                                            type="button"
+                                                            class="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+                                                            @click="openAssessmentResultModal(task, 'teacher', item.type, 'received_teacher', 'first_submit')"
+                                                        >
+                                                            Lihat Hasil Guru
+                                                        </button>
+                                                        <span v-else class="text-xs text-gray-500">Belum ada hasil</span>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
+
+                                <!-- ── Asesmen Final Submission ───────────────────── -->
+                                <div v-if="task.final_submission" class="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 p-4">
+                                    <h6 class="text-sm font-semibold text-blue-900 dark:text-blue-200">Asesmen Final Submission</h6>
+                                    <p class="mt-1 text-xs text-blue-800 dark:text-blue-300">Setiap asesmen hanya bisa dikirim sekali dan tidak dapat diubah.</p>
+
+                                    <div class="mt-3 overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-blue-200 dark:divide-blue-800 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800/60 text-sm">
+                                            <thead class="bg-blue-100 dark:bg-blue-900/30">
+                                                <tr>
+                                                    <th class="px-4 py-2 text-left font-semibold text-blue-900 dark:text-blue-200">Jenis Asesmen</th>
+                                                    <th class="px-4 py-2 text-left font-semibold text-blue-900 dark:text-blue-200">Penilaian Pribadi (Kelompok)</th>
+                                                    <th class="px-4 py-2 text-left font-semibold text-blue-900 dark:text-blue-200">Penilaian Teman Sebaya (Kelompok)</th>
+                                                    <th class="px-4 py-2 text-left font-semibold text-blue-900 dark:text-blue-200">Asesmen Guru</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-blue-100 dark:divide-blue-900/40 text-gray-700 dark:text-slate-300">
+                                                <tr v-for="(item, idx) in assessmentItems" :key="`${task.id}-final-${item.type}`">
+                                                    <td class="px-4 py-2">{{ idx + 1 }}. {{ item.label }}</td>
+                                                    <td class="px-4 py-2">
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-md border px-3 py-1.5 text-xs font-semibold"
+                                                            :class="hasAssessmentSubmitted(task, 'personal_group', item.type, 'final_submit')
+                                                                ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-600'
+                                                                : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50'"
+                                                            :disabled="hasAssessmentSubmitted(task, 'personal_group', item.type, 'final_submit')"
+                                                            @click="openAssessmentModal(task, 'personal_group', item.type, 'final_submit')"
+                                                        >
+                                                            <span v-if="hasAssessmentSubmitted(task, 'personal_group', item.type, 'final_submit')">
+                                                                Terkirim (Total {{ getAssessmentStatus(task, 'personal_group', item.type, 'final_submit')?.total_score }}, Rata-rata {{ getAssessmentStatus(task, 'personal_group', item.type, 'final_submit')?.average_score }})
+                                                            </span>
+                                                            <span v-else>Isi Asesmen</span>
+                                                        </button>
+                                                        <button
+                                                            v-if="hasAssessmentSubmitted(task, 'personal_group', item.type, 'final_submit')"
+                                                            type="button"
+                                                            class="mt-2 block rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                            @click="openAssessmentResultModal(task, 'personal_group', item.type, 'submitted', 'final_submit')"
+                                                        >
+                                                            Lihat Hasil
+                                                        </button>
+                                                    </td>
+                                                    <td class="px-4 py-2">
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-md border px-3 py-1.5 text-xs font-semibold"
+                                                            :class="hasAssessmentSubmitted(task, 'peer_group', item.type, 'final_submit')
+                                                                ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-600'
+                                                                : 'border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50'"
+                                                            :disabled="hasAssessmentSubmitted(task, 'peer_group', item.type, 'final_submit')"
+                                                            @click="openAssessmentModal(task, 'peer_group', item.type, 'final_submit')"
+                                                        >
+                                                            <span v-if="hasAssessmentSubmitted(task, 'peer_group', item.type, 'final_submit')">
+                                                                Terkirim (Total {{ getAssessmentStatus(task, 'peer_group', item.type, 'final_submit')?.total_score }}, Rata-rata {{ getAssessmentStatus(task, 'peer_group', item.type, 'final_submit')?.average_score }})
+                                                            </span>
+                                                            <span v-else>Isi Asesmen</span>
+                                                        </button>
+                                                        <div class="mt-2 flex flex-wrap gap-2">
+                                                            <button
+                                                                v-if="hasAssessmentSubmitted(task, 'peer_group', item.type, 'final_submit')"
+                                                                type="button"
+                                                                class="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                                @click="openAssessmentResultModal(task, 'peer_group', item.type, 'submitted', 'final_submit')"
+                                                            >
+                                                                Lihat Hasil Saya
+                                                            </button>
+                                                            <button
+                                                                v-if="getReceivedPeerAssessments(task, item.type, 'final_submit').length > 0"
+                                                                type="button"
+                                                                class="rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                                                                @click="openAssessmentResultModal(task, 'peer_group', item.type, 'received_peer', 'final_submit')"
+                                                            >
+                                                                Lihat Hasil Peer ke Kelompok Saya
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                    <td class="px-4 py-2">
+                                                        <button
+                                                            v-if="getReceivedTeacherAssessments(task, item.type, 'final_submit').length > 0"
+                                                            type="button"
+                                                            class="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+                                                            @click="openAssessmentResultModal(task, 'teacher', item.type, 'received_teacher', 'final_submit')"
+                                                        >
+                                                            Lihat Hasil Guru
+                                                        </button>
+                                                        <span v-else class="text-xs text-gray-500">Belum ada hasil</span>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div v-else class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                    Asesmen Final Submission tersedia setelah kelompok melakukan final submission.
+                                </div>
+                            </template>
 
                             <div v-if="task.can_submit" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1457,9 +1561,9 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                         <label class="flex items-start gap-2">
-                            <input v-model="currentAssessmentForm.confirm_irreversible" type="checkbox" class="mt-0.5">
+                            <input v-model="currentAssessmentForm.confirm_irreversible" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-400 dark:focus:ring-amber-400">
                             <span>Saya memahami bahwa asesmen ini tidak bisa diubah dan hanya bisa dilakukan sekali.</span>
                         </label>
                         <InputError class="mt-2" :message="currentAssessmentForm.errors.confirm_irreversible" />

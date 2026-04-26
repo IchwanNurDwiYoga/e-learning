@@ -1,8 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
-import { Inertia } from '@inertiajs/inertia';
-import { Link } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
@@ -92,6 +90,18 @@ const setLeader = (groupId, userId) => {
         user: userId,
     }), {
         preserveScroll: true,
+    });
+};
+
+const removingMember = ref(null);
+
+const removeMember = (groupId, userId, memberName) => {
+    if (removingMember.value) return;
+    if (!confirm(`Hapus ${memberName} dari grup ini?`)) return;
+    removingMember.value = { groupId, userId };
+    router.delete(route('teacher.learning-groups.members.destroy', { learningGroup: groupId, user: userId }), {
+        preserveScroll: true,
+        onFinish: () => { removingMember.value = null; },
     });
 };
 
@@ -289,7 +299,7 @@ const formatDate = (dateString) => {
                                                 <p class="mt-1 text-sm text-slate-500">Role: {{ member.pivot.role }}</p>
                                             </div>
 
-                                            <div>
+                                            <div class="flex items-center gap-2">
                                                 <button v-if="member.pivot.role !== 'leader'" type="button"
                                                     class="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
                                                     @click.prevent="setLeader(group.id, member.id)">
@@ -299,6 +309,19 @@ const formatDate = (dateString) => {
                                                     class="inline-flex items-center rounded-full bg-indigo-100 px-3 py-2 text-sm font-medium text-indigo-700">
                                                     Group Leader
                                                 </span>
+                                                <div v-if="member.pivot.role !== 'leader'" class="flex flex-col items-end gap-0.5">
+                                                    <button
+                                                        type="button"
+                                                        :disabled="removingMember?.groupId === group.id && removingMember?.userId === member.id"
+                                                        class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                        @click.prevent="removeMember(group.id, member.id, member.name)"
+                                                    >
+                                                        {{ removingMember?.groupId === group.id && removingMember?.userId === member.id ? 'Menghapus...' : 'Hapus dari Grup' }}
+                                                    </button>
+                                                </div>
+                                                <div v-else class="flex flex-col items-end gap-0.5">
+                                                    <span class="text-xs text-gray-400">Team leader tidak dapat dihapus</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

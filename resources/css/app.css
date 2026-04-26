@@ -1,3 +1,87 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	html {
+		@apply bg-[#f7f1e8] text-slate-900;
+	}
+
+	html.dark {
+		@apply bg-slate-950 text-slate-100;
+	}
+
+	body {
+		@apply min-h-screen bg-inherit text-inherit antialiased transition-colors duration-300;
+	}
+
+	html.dark input,
+	html.dark textarea,
+	html.dark select {
+		@apply border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400;
+	}
+
+	html.dark .text-slate-900 {
+		@apply text-slate-100;
+	}
+
+	html.dark .text-slate-800 {
+		@apply text-slate-200;
+	}
+
+	html.dark .text-slate-700 {
+		@apply text-slate-300;
+	}
+
+	html.dark .text-slate-600,
+	html.dark .text-gray-600,
+	html.dark .text-gray-700 {
+		@apply text-slate-400;
+	}
+
+	html.dark .text-gray-900 {
+		@apply text-slate-100;
+	}
+
+	html.dark .text-gray-800 {
+		@apply text-slate-200;
+	}
+
+	html.dark .text-gray-500 {
+		@apply text-slate-400;
+	}
+
+	html.dark .border-slate-200,
+	html.dark .border-gray-200 {
+		@apply border-slate-700;
+	}
+
+	html.dark .border-slate-300,
+	html.dark .border-gray-300 {
+		@apply border-slate-600;
+	}
+
+	html.dark .bg-white,
+	html.dark .bg-white\/90,
+	html.dark .bg-white\/80,
+	html.dark .bg-white\/70,
+	html.dark .bg-white\/60 {
+		@apply bg-slate-900;
+	}
+
+	html.dark .bg-slate-50,
+	html.dark .bg-slate-100 {
+		@apply bg-slate-800;
+	}
+
+	html.dark .bg-gray-50,
+	html.dark .bg-gray-100 {
+		@apply bg-slate-800;
+	}
+
+	html.dark .hover\:bg-slate-50:hover,
+	html.dark .hover\:bg-slate-100:hover,
+	html.dark .hover\:bg-gray-50:hover {
+		@apply bg-slate-800;
+	}
+}

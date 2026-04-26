@@ -54,6 +54,7 @@ class TaskSubmissionController extends Controller
                     'id' => $assessment->id,
                     'target_group_id' => $assessment->target_group_id,
                     'assessment_type' => $assessment->assessment_type,
+                    'submission_stage' => $assessment->submission_stage,
                     'scores' => array_values($scores),
                     'comments' => array_values($comments),
                     'total_score' => $assessment->total_score,

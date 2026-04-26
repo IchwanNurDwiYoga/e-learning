@@ -91,6 +91,7 @@ class StudentController extends Controller
                         return [
                             'assessment_scope' => $assessment->assessment_scope,
                             'assessment_type' => $assessment->assessment_type,
+                            'submission_stage' => $assessment->submission_stage,
                             'target_group_id' => $assessment->target_group_id,
                             'total_score' => $assessment->total_score,
                             'average_score' => $assessment->average_score,
@@ -122,6 +123,7 @@ class StudentController extends Controller
                         'id' => $assessment->id,
                         'assessment_scope' => $assessment->assessment_scope,
                         'assessment_type' => $assessment->assessment_type,
+                        'submission_stage' => $assessment->submission_stage,
                         'assessment_date' => $assessment->assessment_date,
                         'class_name' => $assessment->class_name,
                         'assessor_name' => $assessment->assessor_name,

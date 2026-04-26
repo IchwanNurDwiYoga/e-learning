@@ -261,7 +261,7 @@
     <div class="card" role="main">
 
         <!-- logo -->
-        <div class="logo" aria-label="E-PASTE Logo">EL</div>
+        <div class="logo" aria-label="E-PASTE Logo">E-PASTE</div>
 
         <!-- gears -->
         <div class="gear-wrap" aria-hidden="true">

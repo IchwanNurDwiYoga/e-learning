@@ -52,6 +52,7 @@ Route::middleware(['auth', 'role:teacher'])->group(function () {
     Route::post('/teacher/learning-groups', [TeacherController::class, 'storeLearningGroup'])->name('teacher.learning-groups.store');
     Route::post('/teacher/learning-groups/{learningGroup}/members', [TeacherController::class, 'storeLearningGroupMember'])->name('teacher.learning-groups.members.store');
     Route::post('/teacher/learning-groups/{learningGroup}/members/{user}/leader', [TeacherController::class, 'setLearningGroupLeader'])->name('teacher.learning-groups.members.leader');
+    Route::delete('/teacher/learning-groups/{learningGroup}/members/{user}', [TeacherController::class, 'removeLearningGroupMember'])->name('teacher.learning-groups.members.destroy');
 
     // Task Routes
     Route::get('/teacher/courses/{course}/tasks/create', [TaskController::class, 'create'])->name('teacher.tasks.create');

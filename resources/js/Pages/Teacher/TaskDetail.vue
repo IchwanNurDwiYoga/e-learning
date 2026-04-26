@@ -181,12 +181,12 @@ const todayLabel = new Date().toLocaleDateString('id-ID', { year: 'numeric', mon
 
 // ─── Teacher Assessment Submission ──────────────────────────────────────────
 
-const getAssessmentFormKey = (groupId, type) => `${groupId}-${type}`;
+const getAssessmentFormKey = (groupId, type, stage) => `${groupId}-${type}-${stage}`;
 
-const getAssessmentForm = (groupId, type) => {
-    const key = getAssessmentFormKey(groupId, type);
+const getAssessmentForm = (groupId, type, stage) => {
+    const key = getAssessmentFormKey(groupId, type, stage);
     if (!assessmentForms.value[key]) {
-        const initial = { assessment_type: type, target_group_id: groupId, confirm_irreversible: false };
+        const initial = { assessment_type: type, target_group_id: groupId, submission_stage: stage, confirm_irreversible: false };
         for (let i = 1; i <= 20; i++) {
             initial[`score_${i}`] = null;
             initial[`comment_${i}`] = '';
@@ -196,34 +196,35 @@ const getAssessmentForm = (groupId, type) => {
     return assessmentForms.value[key];
 };
 
-const hasTeacherAssessment = (groupId, type) => {
+const hasTeacherAssessment = (groupId, type, stage) => {
     return props.teacher_assessments.some(
-        (a) => a.target_group_id === groupId && a.assessment_type === type,
+        (a) => a.target_group_id === groupId && a.assessment_type === type && a.submission_stage === stage,
     );
 };
 
-const getTeacherAssessment = (groupId, type) => {
+const getTeacherAssessment = (groupId, type, stage) => {
     return props.teacher_assessments.find(
-        (a) => a.target_group_id === groupId && a.assessment_type === type,
+        (a) => a.target_group_id === groupId && a.assessment_type === type && a.submission_stage === stage,
     ) || null;
 };
 
-const openAssessmentModal = (groupId, groupName, type) => {
-    if (hasTeacherAssessment(groupId, type)) return;
+const openAssessmentModal = (groupId, groupName, type, stage) => {
+    if (hasTeacherAssessment(groupId, type, stage)) return;
 
-    const form = getAssessmentForm(groupId, type);
+    const form = getAssessmentForm(groupId, type, stage);
     form.assessment_type = type;
     form.target_group_id = groupId;
+    form.submission_stage = stage;
 
-    assessmentModal.value = { groupId, groupName, type };
+    assessmentModal.value = { groupId, groupName, type, stage };
 };
 
 const closeAssessmentModal = () => { assessmentModal.value = null; };
 
-const openResultModal = (groupId, type) => {
-    const assessment = getTeacherAssessment(groupId, type);
+const openResultModal = (groupId, type, stage) => {
+    const assessment = getTeacherAssessment(groupId, type, stage);
     if (assessment) {
-        resultModal.value = { assessment, type };
+        resultModal.value = { assessment, type, stage };
     }
 };
 
@@ -231,7 +232,7 @@ const closeResultModal = () => { resultModal.value = null; };
 
 const currentForm = computed(() => {
     if (!assessmentModal.value) return null;
-    return getAssessmentForm(assessmentModal.value.groupId, assessmentModal.value.type);
+    return getAssessmentForm(assessmentModal.value.groupId, assessmentModal.value.type, assessmentModal.value.stage);
 });
 
 const currentRubric = computed(() => {
@@ -335,10 +336,10 @@ const getFileName = (filePath) => {
             <div class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6 lg:px-8">
 
                 <!-- Flash messages -->
-                <div v-if="flashSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div v-if="flashSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
                     {{ flashSuccess }}
                 </div>
-                <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
                     {{ flashError }}
                 </div>
 
@@ -460,7 +461,7 @@ const getFileName = (filePath) => {
                                         <p v-else class="text-sm text-gray-500">Tidak ada file.</p>
                                     </div>
 
-                                    <div v-if="submission.final_submission" class="rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                                    <div v-if="submission.final_submission" class="rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/20 p-3">
                                         <div class="mb-2 flex items-center gap-2">
                                             <span class="inline-block rounded bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700">
                                                 {{ getSubmissionLabel(submission.final_submission.submission_label) }}
@@ -513,60 +514,118 @@ const getFileName = (filePath) => {
                                 <div class="text-xs text-gray-500">Last updated: {{ formatDate(submission.updated_at) }}</div>
 
                                 <!-- ─── Teacher Assessment Section (per kelompok) ─── -->
-                                <div v-if="submission.final_submission" class="border-t border-indigo-200 pt-4">
-                                    <h5 class="mb-3 text-sm font-semibold text-indigo-900">Asesmen Guru – {{ submission.learning_group?.name }}</h5>
-                                    <p class="mb-3 text-xs text-indigo-700">Setiap asesmen hanya bisa dikirim sekali dan tidak dapat diubah.</p>
+                                <template v-if="submission.first_submission">
+                                    <div class="border-t border-slate-200 pt-4">
+                                        <h5 class="mb-3 text-sm font-semibold text-slate-900">Asesmen Guru - First Submission ({{ submission.learning_group?.name }})</h5>
+                                        <p class="mb-3 text-xs text-slate-700">Setiap asesmen hanya bisa dikirim sekali dan tidak dapat diubah.</p>
 
-                                    <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-indigo-100 rounded-md border border-indigo-200 bg-white text-sm">
-                                            <thead class="bg-indigo-50">
-                                                <tr>
-                                                    <th class="px-4 py-2 text-left font-semibold text-indigo-900">Jenis Asesmen</th>
-                                                    <th class="px-4 py-2 text-left font-semibold text-indigo-900">Status</th>
-                                                    <th class="px-4 py-2 text-left font-semibold text-indigo-900">Aksi</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-indigo-50 text-gray-700">
-                                                <tr v-for="item in assessmentTypes" :key="item.type">
-                                                    <td class="px-4 py-2 font-medium">{{ item.label }}</td>
-                                                    <td class="px-4 py-2">
-                                                        <span
-                                                            v-if="hasTeacherAssessment(submission.learning_group_id, item.type)"
-                                                            class="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800"
-                                                        >
-                                                            Terkirim (Total {{ getTeacherAssessment(submission.learning_group_id, item.type)?.total_score }}, Rata-rata {{ Number(getTeacherAssessment(submission.learning_group_id, item.type)?.average_score || 0).toFixed(2) }})
-                                                        </span>
-                                                        <span v-else class="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                                                            Belum dinilai
-                                                        </span>
-                                                    </td>
-                                                    <td class="px-4 py-2">
-                                                        <div class="flex flex-wrap gap-2">
-                                                            <button
-                                                                v-if="!hasTeacherAssessment(submission.learning_group_id, item.type)"
-                                                                type="button"
-                                                                class="rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
-                                                                @click="openAssessmentModal(submission.learning_group_id, submission.learning_group?.name, item.type)"
+                                        <div class="overflow-x-auto">
+                                            <table class="min-w-full divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm">
+                                                <thead class="bg-slate-50">
+                                                    <tr>
+                                                        <th class="px-4 py-2 text-left font-semibold text-slate-900">Jenis Asesmen</th>
+                                                        <th class="px-4 py-2 text-left font-semibold text-slate-900">Status</th>
+                                                        <th class="px-4 py-2 text-left font-semibold text-slate-900">Aksi</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-50 text-gray-700">
+                                                    <tr v-for="item in assessmentTypes" :key="`first-${item.type}`">
+                                                        <td class="px-4 py-2 font-medium">{{ item.label }}</td>
+                                                        <td class="px-4 py-2">
+                                                            <span
+                                                                v-if="hasTeacherAssessment(submission.learning_group_id, item.type, 'first_submit')"
+                                                                class="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800"
                                                             >
-                                                                Isi Asesmen
-                                                            </button>
-                                                            <button
-                                                                v-if="hasTeacherAssessment(submission.learning_group_id, item.type)"
-                                                                type="button"
-                                                                class="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                                                                @click="openResultModal(submission.learning_group_id, item.type)"
-                                                            >
-                                                                Lihat Hasil
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                                                Terkirim (Total {{ getTeacherAssessment(submission.learning_group_id, item.type, 'first_submit')?.total_score }}, Rata-rata {{ Number(getTeacherAssessment(submission.learning_group_id, item.type, 'first_submit')?.average_score || 0).toFixed(2) }})
+                                                            </span>
+                                                            <span v-else class="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                                                                Belum dinilai
+                                                            </span>
+                                                        </td>
+                                                        <td class="px-4 py-2">
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <button
+                                                                    v-if="!hasTeacherAssessment(submission.learning_group_id, item.type, 'first_submit')"
+                                                                    type="button"
+                                                                    class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                                                    @click="openAssessmentModal(submission.learning_group_id, submission.learning_group?.name, item.type, 'first_submit')"
+                                                                >
+                                                                    Isi Asesmen
+                                                                </button>
+                                                                <button
+                                                                    v-if="hasTeacherAssessment(submission.learning_group_id, item.type, 'first_submit')"
+                                                                    type="button"
+                                                                    class="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                                    @click="openResultModal(submission.learning_group_id, item.type, 'first_submit')"
+                                                                >
+                                                                    Lihat Hasil
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                </div>
+
+                                    <div v-if="submission.final_submission" class="mt-4 border-t border-indigo-200 dark:border-indigo-800 pt-4">
+                                        <h5 class="mb-3 text-sm font-semibold text-indigo-900 dark:text-indigo-200">Asesmen Guru - Final Submission ({{ submission.learning_group?.name }})</h5>
+                                        <p class="mb-3 text-xs text-indigo-700 dark:text-indigo-300">Setiap asesmen hanya bisa dikirim sekali dan tidak dapat diubah.</p>
+
+                                        <div class="overflow-x-auto">
+                                            <table class="min-w-full divide-y divide-indigo-100 dark:divide-indigo-800 rounded-md border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800/60 text-sm">
+                                                <thead class="bg-indigo-50 dark:bg-indigo-900/30">
+                                                    <tr>
+                                                        <th class="px-4 py-2 text-left font-semibold text-indigo-900 dark:text-indigo-200">Jenis Asesmen</th>
+                                                        <th class="px-4 py-2 text-left font-semibold text-indigo-900 dark:text-indigo-200">Status</th>
+                                                        <th class="px-4 py-2 text-left font-semibold text-indigo-900 dark:text-indigo-200">Aksi</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-indigo-50 dark:divide-indigo-900/40 text-gray-700 dark:text-slate-300">
+                                                    <tr v-for="item in assessmentTypes" :key="`final-${item.type}`">
+                                                        <td class="px-4 py-2 font-medium">{{ item.label }}</td>
+                                                        <td class="px-4 py-2">
+                                                            <span
+                                                                v-if="hasTeacherAssessment(submission.learning_group_id, item.type, 'final_submit')"
+                                                                class="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+                                                            >
+                                                                Terkirim (Total {{ getTeacherAssessment(submission.learning_group_id, item.type, 'final_submit')?.total_score }}, Rata-rata {{ Number(getTeacherAssessment(submission.learning_group_id, item.type, 'final_submit')?.average_score || 0).toFixed(2) }})
+                                                            </span>
+                                                            <span v-else class="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                                                                Belum dinilai
+                                                            </span>
+                                                        </td>
+                                                        <td class="px-4 py-2">
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <button
+                                                                    v-if="!hasTeacherAssessment(submission.learning_group_id, item.type, 'final_submit')"
+                                                                    type="button"
+                                                                    class="rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                                                                    @click="openAssessmentModal(submission.learning_group_id, submission.learning_group?.name, item.type, 'final_submit')"
+                                                                >
+                                                                    Isi Asesmen
+                                                                </button>
+                                                                <button
+                                                                    v-if="hasTeacherAssessment(submission.learning_group_id, item.type, 'final_submit')"
+                                                                    type="button"
+                                                                    class="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                                    @click="openResultModal(submission.learning_group_id, item.type, 'final_submit')"
+                                                                >
+                                                                    Lihat Hasil
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div v-else class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                        Asesmen final submission tersedia setelah kelompok melakukan final submission.
+                                    </div>
+                                </template>
                                 <div v-else class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                                    Asesmen guru tersedia setelah kelompok melakukan final submission.
+                                    Asesmen guru tersedia setelah kelompok melakukan first submission.
                                 </div>
                             </div>
                         </div>
@@ -638,9 +697,9 @@ const getFileName = (filePath) => {
                         </div>
                     </div>
 
-                    <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                         <label class="flex items-start gap-2">
-                            <input v-model="currentForm.confirm_irreversible" type="checkbox" class="mt-0.5">
+                            <input v-model="currentForm.confirm_irreversible" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-400 dark:focus:ring-amber-400">
                             <span>Saya memahami bahwa asesmen ini tidak bisa diubah dan hanya bisa dilakukan sekali.</span>
                         </label>
                         <InputError class="mt-2" :message="currentForm.errors.confirm_irreversible" />

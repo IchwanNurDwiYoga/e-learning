@@ -18,6 +18,9 @@ class TaskAssessment extends Model
     public const TYPE_PRODUCT = 'product';
     public const TYPE_PRODUCT_PRESENTATION = 'product_presentation';
 
+    public const STAGE_FIRST_SUBMIT = 'first_submit';
+    public const STAGE_FINAL_SUBMIT = 'final_submit';
+
     protected $fillable = [
         'task_id',
         'assessor_id',
@@ -25,6 +28,7 @@ class TaskAssessment extends Model
         'target_group_id',
         'assessment_scope',
         'assessment_type',
+        'submission_stage',
         'assessment_date',
         'class_name',
         'assessor_name',

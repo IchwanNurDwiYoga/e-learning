@@ -222,4 +222,27 @@ class TeacherController extends Controller
 
         return Redirect::route('teacher.courses.show', ['course' => $learningGroup->course_id]);
     }
+
+    public function removeLearningGroupMember(Request $request, LearningGroup $learningGroup, User $user): RedirectResponse
+    {
+        if ($learningGroup->created_by !== $request->user()->id) {
+            abort(403);
+        }
+
+        $member = LearningGroupMembers::where('learning_group_id', $learningGroup->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$member) {
+            abort(404, 'Member not found in this group.');
+        }
+
+        if ($member->role === 'leader') {
+            return back()->withErrors(['member' => 'Team leader tidak dapat dihapus dari grup.']);
+        }
+
+        $member->delete();
+
+        return Redirect::route('teacher.courses.show', ['course' => $learningGroup->course_id]);
+    }
 }
