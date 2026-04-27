@@ -36,19 +36,9 @@ class StudentController extends Controller
 
         $submissionsByTask = collect();
         if ($groupIds->isNotEmpty()) {
-            $submissionsByTask = $user->learningGroups()
-                ->with([
-                    'course.tasks.submissions' => function ($query) use ($groupIds) {
-                        $query->whereIn('learning_group_id', $groupIds)->with('submittedBy');
-                    },
-                ])
+            $submissionsByTask = TaskSubmission::whereIn('learning_group_id', $groupIds)
+                ->with('submittedBy')
                 ->get()
-                ->flatMap(function ($group) {
-                    return $group->course?->tasks ?? [];
-                })
-                ->flatMap(function ($task) {
-                    return $task->submissions;
-                })
                 ->groupBy('task_id')
                 ->map(function ($submissions) {
                     return $submissions->sortBy('created_at')->values();
@@ -68,19 +58,41 @@ class StudentController extends Controller
                 $isCompleted = $deadline && $deadline->lt($now);
                 $isOngoing = !$isUpcoming && !$isCompleted;
 
-                $learningGroup = $groups->firstWhere('course_id', $task->course_id);
+                $learningGroup = $groups->firstWhere('task_id', $task->id)
+                    ?? $groups->first(function ($group) use ($task) {
+                        return !$group->task_id && $group->course_id === $task->course_id;
+                    });
                 $pivotRole = $learningGroup?->pivot?->role;
                 $isLeader = $pivotRole === 'leader';
                 $taskSubmissions = $submissionsByTask->get($task->id, collect());
                 $firstSubmission = $taskSubmissions->firstWhere('submission_label', TaskSubmission::LABEL_FIRST_SUBMIT);
                 $finalSubmission = $taskSubmissions->firstWhere('submission_label', TaskSubmission::LABEL_FINAL_SUBMIT);
                 $existingSubmission = $finalSubmission ?? $taskSubmissions->last();
-                $courseGroups = LearningGroup::where('course_id', $task->course_id)
+
+                $allTaskSubmissions = TaskSubmission::query()
+                    ->where('task_id', $task->id)
+                    ->get(['learning_group_id', 'submission_label']);
+
+                $courseGroups = LearningGroup::query()
+                    ->where(function ($query) use ($task) {
+                        $query->where('task_id', $task->id)
+                            ->orWhere(function ($legacyQuery) use ($task) {
+                                $legacyQuery->whereNull('task_id')->where('course_id', $task->course_id);
+                            });
+                    })
                     ->get(['id', 'name'])
-                    ->map(function ($group) {
+                    ->map(function ($group) use ($allTaskSubmissions) {
                         return [
                             'id' => $group->id,
                             'name' => $group->name,
+                            'first_submission' => $allTaskSubmissions->contains(function ($submission) use ($group) {
+                                return (int) $submission->learning_group_id === (int) $group->id
+                                    && $submission->submission_label === TaskSubmission::LABEL_FIRST_SUBMIT;
+                            }),
+                            'final_submission' => $allTaskSubmissions->contains(function ($submission) use ($group) {
+                                return (int) $submission->learning_group_id === (int) $group->id
+                                    && $submission->submission_label === TaskSubmission::LABEL_FINAL_SUBMIT;
+                            }),
                         ];
                     });
 
@@ -171,12 +183,18 @@ class StudentController extends Controller
                         return null;
                     }
 
+                    $taskFilePath = $submission->task_file_path ?: $submission->file_path;
+                    $productFilePath = $submission->product_file_path;
+
                     return [
                         'id' => $submission->id,
                         'submission_label' => $submission->submission_label,
                         'description' => $submission->description,
-                        'file_path' => $submission->file_path,
-                        'file_name' => $submission->file_path ? basename($submission->file_path) : null,
+                        'file_path' => $taskFilePath,
+                        'task_file_path' => $taskFilePath,
+                        'product_file_path' => $productFilePath,
+                        'task_file_name' => $taskFilePath ? basename($taskFilePath) : null,
+                        'product_file_name' => $productFilePath ? basename($productFilePath) : null,
                         'status' => $submission->status,
                         'teacher_notes' => $submission->teacher_notes,
                         'submitted_by' => [

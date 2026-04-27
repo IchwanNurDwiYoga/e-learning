@@ -52,6 +52,11 @@ class Task extends Model
         return $this->hasMany(TaskSubmission::class);
     }
 
+    public function learningGroups(): HasMany
+    {
+        return $this->hasMany(LearningGroup::class);
+    }
+
     public static function topicOptions(): array
     {
         return self::TOPIC_OPTIONS;

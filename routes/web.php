@@ -62,7 +62,7 @@ Route::middleware(['auth', 'role:teacher'])->group(function () {
 
     // Task Submission Routes
     Route::post('/teacher/tasks/{task}/submissions', [TaskSubmissionController::class, 'store'])->name('teacher.task-submissions.store');
-    Route::get('/teacher/task-submissions/{submission}/download', [TaskSubmissionController::class, 'downloadSubmission'])->name('teacher.task-submissions.download');
+    Route::get('/teacher/task-submissions/{submission}/download/{fileType?}', [TaskSubmissionController::class, 'downloadSubmission'])->name('teacher.task-submissions.download');
     Route::patch('/teacher/task-submissions/{submission}/status', [TaskSubmissionController::class, 'updateStatus'])->name('teacher.task-submissions.update-status');
 
     // Teacher Assessment Routes
@@ -76,7 +76,7 @@ Route::middleware(['auth', 'role:student'])->group(function () {
     Route::post('/student/tasks/{task}/submissions', [TaskSubmissionController::class, 'store'])->name('student.task-submissions.store');
     Route::post('/student/tasks/{task}/assessments', [TaskAssessmentController::class, 'store'])->name('student.task-assessments.store');
     Route::get('/student/tasks/{task}/download', [TaskController::class, 'download'])->name('student.tasks.download');
-    Route::get('/student/task-submissions/{submission}/download', [TaskSubmissionController::class, 'downloadSubmission'])->name('student.task-submissions.download');
+    Route::get('/student/task-submissions/{submission}/download/{fileType?}', [TaskSubmissionController::class, 'downloadSubmission'])->name('student.task-submissions.download');
 });
 
 require __DIR__.'/auth.php';

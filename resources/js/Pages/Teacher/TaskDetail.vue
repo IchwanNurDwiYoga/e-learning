@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -22,6 +22,14 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    learning_groups: {
+        type: Array,
+        default: () => [],
+    },
+    available_students: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const page = usePage();
@@ -32,11 +40,113 @@ const expandedSubmissions = ref({});
 const assessmentModal = ref(null);   // { groupId, groupName, type }
 const resultModal = ref(null);       // { assessment }
 const assessmentForms = ref({});
+const showGroupModal = ref(false);
+const expandedGroups = ref({});
+const studentForms = ref({});
+const leaderForms = ref({});
+const removeConfirmModal = ref({
+    open: false,
+    groupId: null,
+    userId: null,
+    memberName: '',
+});
+const removingMember = ref(null);
+
+const taskLearningGroups = computed(() => props.learning_groups ?? []);
+
+const createGroupForm = useForm({
+    name: '',
+    task_id: props.task.id,
+});
 
 const statusForm = useForm({
     status: '',
     teacher_notes: '',
 });
+
+const getStudentForm = (groupId) => {
+    if (!studentForms.value[groupId]) {
+        studentForms.value[groupId] = useForm({
+            existing_student_id: '',
+        });
+    }
+
+    return studentForms.value[groupId];
+};
+
+const getLeaderForm = (groupId, userId) => {
+    const key = `${groupId}-${userId}`;
+    if (!leaderForms.value[key]) {
+        leaderForms.value[key] = useForm({});
+    }
+
+    return leaderForms.value[key];
+};
+
+const toggleGroup = (groupId) => {
+    expandedGroups.value[groupId] = !expandedGroups.value[groupId];
+};
+
+const submitGroup = () => {
+    createGroupForm.post(route('teacher.learning-groups.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            createGroupForm.reset();
+            createGroupForm.task_id = props.task.id;
+            showGroupModal.value = false;
+        },
+    });
+};
+
+const submitStudent = (groupId) => {
+    const form = getStudentForm(groupId);
+
+    form.post(route('teacher.learning-groups.members.store', { learningGroup: groupId }), {
+        preserveScroll: true,
+        onSuccess: () => {
+            form.existing_student_id = '';
+        },
+    });
+};
+
+const setLeader = (groupId, userId) => {
+    const form = getLeaderForm(groupId, userId);
+    form.post(route('teacher.learning-groups.members.leader', {
+        learningGroup: groupId,
+        user: userId,
+    }), {
+        preserveScroll: true,
+    });
+};
+
+const removeMember = (groupId, userId, memberName) => {
+    if (removingMember.value) return;
+
+    removeConfirmModal.value = {
+        open: true,
+        groupId,
+        userId,
+        memberName,
+    };
+};
+
+const confirmRemoveMember = () => {
+    const { groupId, userId } = removeConfirmModal.value;
+    if (!groupId || !userId || removingMember.value) return;
+
+    removeConfirmModal.value.open = false;
+    removingMember.value = { groupId, userId };
+
+    router.delete(route('teacher.learning-groups.members.destroy', {
+        learningGroup: groupId,
+        user: userId,
+    }), {
+        preserveScroll: true,
+        onFinish: () => {
+            removingMember.value = null;
+        },
+    });
+};
 
 // ─── Rubric Data (Guru) ────────────────────────────────────────────────────
 
@@ -377,6 +487,96 @@ const getFileName = (filePath) => {
                     </div>
                 </div>
 
+                <!-- Task Groups Section -->
+                <div class="rounded-lg bg-white px-6 py-8 shadow">
+                    <div class="mb-6 flex items-center justify-between gap-3">
+                        <h3 class="text-lg font-semibold text-gray-900">Task Groups</h3>
+                        <button
+                            type="button"
+                            class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                            @click="showGroupModal = true"
+                        >
+                            + Create Group
+                        </button>
+                    </div>
+
+                    <div v-if="taskLearningGroups.length === 0" class="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-600">
+                        Belum ada group untuk task ini.
+                    </div>
+
+                    <div v-else class="space-y-4">
+                        <div v-for="group in taskLearningGroups" :key="group.id" class="overflow-hidden rounded-lg border border-gray-200">
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between bg-gray-50 px-4 py-3 text-left"
+                                @click="toggleGroup(group.id)"
+                            >
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-900">{{ group.name }}</h4>
+                                    <p class="text-xs text-gray-500">{{ group.members.length }} members</p>
+                                </div>
+                                <svg class="h-5 w-5 transform text-gray-400 transition-transform" :class="{ 'rotate-90': expandedGroups[group.id] }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+
+                            <div v-if="expandedGroups[group.id]" class="space-y-4 px-4 py-4">
+                                <form class="space-y-2" @submit.prevent="submitStudent(group.id)">
+                                    <label class="block text-sm font-medium text-gray-700">Tambah Student</label>
+                                    <div class="flex flex-col gap-2 sm:flex-row">
+                                        <select
+                                            v-model="getStudentForm(group.id).existing_student_id"
+                                            class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        >
+                                            <option value="">Pilih student...</option>
+                                            <option v-for="student in available_students" :key="student.id" :value="student.id">
+                                                {{ student.name }} - {{ student.username }}
+                                            </option>
+                                        </select>
+                                        <PrimaryButton type="submit">Add to Group</PrimaryButton>
+                                    </div>
+                                    <InputError class="mt-2" :message="getStudentForm(group.id).errors.existing_student_id" />
+                                </form>
+
+                                <div class="space-y-2">
+                                    <h5 class="text-sm font-semibold text-slate-900">Group Members</h5>
+                                    <div v-if="group.members.length === 0" class="rounded-md border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">
+                                        Belum ada member.
+                                    </div>
+                                    <div v-else class="space-y-2">
+                                        <div v-for="member in group.members" :key="member.id" class="flex flex-col gap-2 rounded-md border border-slate-200 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p class="text-sm font-medium text-slate-900">{{ member.name }} <span class="text-xs text-slate-500">({{ member.username }})</span></p>
+                                                <p class="text-xs text-slate-500">Role: {{ member.pivot.role }}</p>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    v-if="member.pivot.role !== 'leader'"
+                                                    type="button"
+                                                    class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                                                    @click.prevent="setLeader(group.id, member.id)"
+                                                >
+                                                    Set as Leader
+                                                </button>
+                                                <span v-else class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">Group Leader</span>
+                                                <button
+                                                    v-if="member.pivot.role !== 'leader'"
+                                                    type="button"
+                                                    :disabled="removingMember?.groupId === group.id && removingMember?.userId === member.id"
+                                                    class="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                    @click.prevent="removeMember(group.id, member.id, member.name)"
+                                                >
+                                                    {{ removingMember?.groupId === group.id && removingMember?.userId === member.id ? 'Menghapus...' : 'Hapus dari Grup' }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Submissions Section -->
                 <div class="rounded-lg bg-white px-6 py-8 shadow">
                     <h3 class="mb-6 text-lg font-semibold text-gray-900">Group Submissions</h3>
@@ -448,17 +648,29 @@ const getFileName = (filePath) => {
                                                 {{ formatDate(submission.first_submission.created_at) }}
                                             </span>
                                         </div>
-                                        <a
-                                            v-if="submission.first_submission.file_path"
-                                            :href="route('teacher.task-submissions.download', submission.first_submission.id)"
-                                            class="inline-flex items-center gap-2 font-medium text-indigo-600 hover:text-indigo-700"
-                                        >
-                                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            {{ getFileName(submission.first_submission.file_path) }} (Download)
-                                        </a>
-                                        <p v-else class="text-sm text-gray-500">Tidak ada file.</p>
+                                        <div class="space-y-1">
+                                            <a
+                                                v-if="submission.first_submission.task_file_path"
+                                                :href="route('teacher.task-submissions.download', { submission: submission.first_submission.id, fileType: 'task' })"
+                                                class="inline-flex items-center gap-2 font-medium text-indigo-600 hover:text-indigo-700"
+                                            >
+                                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                Task: {{ getFileName(submission.first_submission.task_file_path) }}
+                                            </a>
+                                            <a
+                                                v-if="submission.first_submission.product_file_path"
+                                                :href="route('teacher.task-submissions.download', { submission: submission.first_submission.id, fileType: 'product' })"
+                                                class="inline-flex items-center gap-2 font-medium text-emerald-600 hover:text-emerald-700"
+                                            >
+                                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                Product: {{ getFileName(submission.first_submission.product_file_path) }}
+                                            </a>
+                                            <p v-if="!submission.first_submission.task_file_path && !submission.first_submission.product_file_path" class="text-sm text-gray-500">Tidak ada file.</p>
+                                        </div>
                                     </div>
 
                                     <div v-if="submission.final_submission" class="rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/20 p-3">
@@ -470,22 +682,34 @@ const getFileName = (filePath) => {
                                                 {{ formatDate(submission.final_submission.created_at) }}
                                             </span>
                                         </div>
-                                        <a
-                                            v-if="submission.final_submission.file_path"
-                                            :href="route('teacher.task-submissions.download', submission.final_submission.id)"
-                                            class="inline-flex items-center gap-2 font-medium text-indigo-600 hover:text-indigo-700"
-                                        >
-                                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            {{ getFileName(submission.final_submission.file_path) }} (Download)
-                                        </a>
-                                        <p v-else class="text-sm text-gray-500">Tidak ada file.</p>
+                                        <div class="space-y-1">
+                                            <a
+                                                v-if="submission.final_submission.task_file_path"
+                                                :href="route('teacher.task-submissions.download', { submission: submission.final_submission.id, fileType: 'task' })"
+                                                class="inline-flex items-center gap-2 font-medium text-indigo-600 hover:text-indigo-700"
+                                            >
+                                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                Task: {{ getFileName(submission.final_submission.task_file_path) }}
+                                            </a>
+                                            <a
+                                                v-if="submission.final_submission.product_file_path"
+                                                :href="route('teacher.task-submissions.download', { submission: submission.final_submission.id, fileType: 'product' })"
+                                                class="inline-flex items-center gap-2 font-medium text-emerald-600 hover:text-emerald-700"
+                                            >
+                                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                Product: {{ getFileName(submission.final_submission.product_file_path) }}
+                                            </a>
+                                            <p v-if="!submission.final_submission.task_file_path && !submission.final_submission.product_file_path" class="text-sm text-gray-500">Tidak ada file.</p>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <!-- Status Update -->
-                                <div v-if="submission.file_path" class="border-t border-gray-200 pt-4">
+                                <div v-if="submission.first_submission || submission.final_submission" class="border-t border-gray-200 pt-4">
                                     <label class="mb-2 block text-sm font-medium text-gray-700">Update Status</label>
                                     <div class="flex gap-2">
                                         <button
@@ -630,6 +854,70 @@ const getFileName = (filePath) => {
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Group Modal -->
+        <div v-if="showGroupModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+            <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Create Learning Group</h3>
+                        <p class="mt-1 text-sm text-gray-600">Buat group untuk task <strong>{{ task.title }}</strong>.</p>
+                    </div>
+                    <button type="button" class="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200" @click="showGroupModal = false">✕</button>
+                </div>
+
+                <form class="mt-6 space-y-6" @submit.prevent="submitGroup">
+                    <div>
+                        <label for="task-group-name" class="block text-sm font-medium text-gray-700">Group Name</label>
+                        <input
+                            id="task-group-name"
+                            v-model="createGroupForm.name"
+                            type="text"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            required
+                            placeholder="e.g., Group A"
+                        >
+                        <InputError class="mt-2" :message="createGroupForm.errors.name" />
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3">
+                        <button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50" @click="showGroupModal = false">
+                            Cancel
+                        </button>
+                        <PrimaryButton type="submit" :disabled="createGroupForm.processing">
+                            {{ createGroupForm.processing ? 'Menyimpan...' : 'Create Group' }}
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Remove Member Confirm Modal -->
+        <div v-if="removeConfirmModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+            <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                <h3 class="text-lg font-semibold text-gray-900">Konfirmasi Hapus Member</h3>
+                <p class="mt-2 text-sm text-gray-600">
+                    Hapus <span class="font-semibold text-gray-900">{{ removeConfirmModal.memberName }}</span> dari group ini?
+                </p>
+
+                <div class="mt-6 flex items-center justify-end gap-3">
+                    <button
+                        type="button"
+                        class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        @click="removeConfirmModal.open = false"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                        @click="confirmRemoveMember"
+                    >
+                        Ya, Hapus
+                    </button>
                 </div>
             </div>
         </div>

@@ -498,7 +498,8 @@ const getForm = (taskId) => {
     if (!submissionForms.value[taskId]) {
         submissionForms.value[taskId] = useForm({
             description: '',
-            file: null,
+            task_file: null,
+            product_file: null,
             confirm_final_submission: false,
         });
     }
@@ -506,9 +507,9 @@ const getForm = (taskId) => {
     return submissionForms.value[taskId];
 };
 
-const onFileChange = (taskId, event) => {
+const onFileChange = (taskId, fileType, event) => {
     const file = event.target.files[0] || null;
-    getForm(taskId).file = file;
+    getForm(taskId)[fileType] = file;
 };
 
 const submitTask = (taskId, isFinalSubmission = false) => {
@@ -523,7 +524,8 @@ const submitTask = (taskId, isFinalSubmission = false) => {
                 confirmFinalTaskId.value = null;
             }
 
-            form.file = null;
+            form.task_file = null;
+            form.product_file = null;
             form.confirm_final_submission = false;
         },
         onFinish: () => {
@@ -631,8 +633,20 @@ const hasAssessmentSubmitted = (task, scope, type, stage) => {
     return Boolean(getAssessmentStatus(task, scope, type, stage));
 };
 
-const hasPeerGroupOptions = (task) => {
-    return (task.course_groups || []).some((group) => group.id !== task.learning_group?.id);
+const getPeerGroupOptionsByStage = (task, stage) => {
+    const submitKey = stage === 'final_submit' ? 'final_submission' : 'first_submission';
+
+    return (task.course_groups || []).filter((group) => {
+        if (group.id === task.learning_group?.id) {
+            return false;
+        }
+
+        return Boolean(group[submitKey]);
+    });
+};
+
+const hasPeerGroupOptions = (task, stage = 'first_submit') => {
+    return getPeerGroupOptionsByStage(task, stage).length > 0;
 };
 
 const openAssessmentModal = (task, scope, type, stage) => {
@@ -648,7 +662,7 @@ const openAssessmentModal = (task, scope, type, stage) => {
     if (scope === 'personal_group') {
         form.target_group_id = task.learning_group?.id || '';
     } else {
-        const peerGroups = (task.course_groups || []).filter((group) => group.id !== task.learning_group?.id);
+        const peerGroups = getPeerGroupOptionsByStage(task, stage);
         form.target_group_id = peerGroups[0]?.id || '';
     }
 
@@ -851,7 +865,7 @@ const currentTargetGroupOptions = computed(() => {
         return (task.course_groups || []).filter((group) => group.id === task.learning_group?.id);
     }
 
-    return (task.course_groups || []).filter((group) => group.id !== task.learning_group?.id);
+    return getPeerGroupOptionsByStage(task, assessmentModal.value.stage);
 });
 
 const todayLabel = computed(() => {
@@ -1107,25 +1121,49 @@ onBeforeUnmount(() => {
 
                                 <div class="space-y-2 rounded-md bg-gray-50 p-3">
                                     <div class="flex items-center justify-between gap-3">
-                                        <span class="font-medium text-gray-700">First Submission:</span>
+                                        <span class="font-medium text-gray-700">First Submission - Task File:</span>
                                         <a
-                                            v-if="task.first_submission?.file_path"
-                                            :href="route('student.task-submissions.download', task.first_submission.id)"
+                                            v-if="task.first_submission?.task_file_path"
+                                            :href="route('student.task-submissions.download', { submission: task.first_submission.id, fileType: 'task' })"
                                             class="font-semibold text-indigo-600 hover:text-indigo-700"
                                         >
-                                            {{ task.first_submission.file_name }} (Download)
+                                            {{ task.first_submission.task_file_name }} (Download)
                                         </a>
                                         <span v-else class="text-gray-500">Belum upload</span>
                                     </div>
 
                                     <div class="flex items-center justify-between gap-3">
-                                        <span class="font-medium text-gray-700">Final Submission:</span>
+                                        <span class="font-medium text-gray-700">First Submission - Product File:</span>
                                         <a
-                                            v-if="task.final_submission?.file_path"
-                                            :href="route('student.task-submissions.download', task.final_submission.id)"
+                                            v-if="task.first_submission?.product_file_path"
+                                            :href="route('student.task-submissions.download', { submission: task.first_submission.id, fileType: 'product' })"
                                             class="font-semibold text-indigo-600 hover:text-indigo-700"
                                         >
-                                            {{ task.final_submission.file_name }} (Download)
+                                            {{ task.first_submission.product_file_name }} (Download)
+                                        </a>
+                                        <span v-else class="text-gray-500">Belum upload</span>
+                                    </div>
+
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="font-medium text-gray-700">Final Submission - Task File:</span>
+                                        <a
+                                            v-if="task.final_submission?.task_file_path"
+                                            :href="route('student.task-submissions.download', { submission: task.final_submission.id, fileType: 'task' })"
+                                            class="font-semibold text-indigo-600 hover:text-indigo-700"
+                                        >
+                                            {{ task.final_submission.task_file_name }} (Download)
+                                        </a>
+                                        <span v-else class="text-gray-500">Belum upload</span>
+                                    </div>
+
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="font-medium text-gray-700">Final Submission - Product File:</span>
+                                        <a
+                                            v-if="task.final_submission?.product_file_path"
+                                            :href="route('student.task-submissions.download', { submission: task.final_submission.id, fileType: 'product' })"
+                                            class="font-semibold text-indigo-600 hover:text-indigo-700"
+                                        >
+                                            {{ task.final_submission.product_file_name }} (Download)
                                         </a>
                                         <span v-else class="text-gray-500">Belum upload</span>
                                     </div>
@@ -1348,14 +1386,25 @@ onBeforeUnmount(() => {
                                     </div>
 
                                     <div>
-                                        <label :for="`file-${task.id}`" class="block text-sm font-medium text-gray-700">File Jawaban</label>
+                                        <label :for="`task-file-${task.id}`" class="block text-sm font-medium text-gray-700">File Task</label>
                                         <input
-                                            :id="`file-${task.id}`"
+                                            :id="`task-file-${task.id}`"
                                             type="file"
                                             class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm"
-                                            @change="onFileChange(task.id, $event)"
+                                            @change="onFileChange(task.id, 'task_file', $event)"
                                         >
-                                        <InputError class="mt-2" :message="getForm(task.id).errors.file" />
+                                        <InputError class="mt-2" :message="getForm(task.id).errors.task_file" />
+                                    </div>
+
+                                    <div>
+                                        <label :for="`product-file-${task.id}`" class="block text-sm font-medium text-gray-700">File Product</label>
+                                        <input
+                                            :id="`product-file-${task.id}`"
+                                            type="file"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm"
+                                            @change="onFileChange(task.id, 'product_file', $event)"
+                                        >
+                                        <InputError class="mt-2" :message="getForm(task.id).errors.product_file" />
                                     </div>
 
                                     <PrimaryButton :disabled="getForm(task.id).processing">

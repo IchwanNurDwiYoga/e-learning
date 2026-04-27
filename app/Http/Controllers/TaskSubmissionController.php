@@ -9,6 +9,7 @@ use App\Models\LearningGroup;
 use App\Http\Requests\StoreTaskSubmissionRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -20,7 +21,7 @@ class TaskSubmissionController extends Controller
      */
     public function show(Task $task)
     {
-        $user = auth()->user();
+        $user = Auth::user();
         $course = $task->course;
 
         // Only allow teacher who created the course
@@ -69,6 +70,8 @@ class TaskSubmissionController extends Controller
                 return null;
             }
 
+            $taskFilePath = $submission->task_file_path ?: $submission->file_path;
+
             return [
                 'id' => $submission->id,
                 'task_id' => $submission->task_id,
@@ -77,7 +80,9 @@ class TaskSubmissionController extends Controller
                 'submitted_by' => $submission->submittedBy,
                 'submission_label' => $submission->submission_label,
                 'description' => $submission->description,
-                'file_path' => $submission->file_path,
+                'file_path' => $taskFilePath,
+                'task_file_path' => $taskFilePath,
+                'product_file_path' => $submission->product_file_path,
                 'status' => $submission->status,
                 'teacher_notes' => $submission->teacher_notes,
                 'created_at' => $submission->created_at,
@@ -106,11 +111,44 @@ class TaskSubmissionController extends Controller
             ->sortByDesc('created_at')
             ->values();
 
+        $taskGroupsQuery = LearningGroup::where(function ($query) use ($task) {
+                $query->where('task_id', $task->id)
+                    ->orWhere(function ($legacyQuery) use ($task) {
+                        $legacyQuery->whereNull('task_id')->where('course_id', $task->course_id);
+                    });
+            })
+            ->with([
+                'members' => function ($memberQuery) {
+                    $memberQuery->select('users.id', 'name', 'username');
+                },
+            ]);
+
+        $taskLearningGroups = $taskGroupsQuery->get();
+        $studentIdsInTask = LearningGroup::where(function ($query) use ($task) {
+                $query->where('task_id', $task->id)
+                    ->orWhere(function ($legacyQuery) use ($task) {
+                        $legacyQuery->whereNull('task_id')->where('course_id', $task->course_id);
+                    });
+            })
+            ->with('members:id')
+            ->get()
+            ->flatMap(function ($group) {
+                return $group->members->pluck('id');
+            })
+            ->unique()
+            ->values();
+
+        $availableStudents = \App\Models\User::where('role', 'student')
+            ->whereNotIn('id', $studentIdsInTask)
+            ->get(['id', 'name', 'username']);
+
         return Inertia::render('Teacher/TaskDetail', [
             'task' => $task,
             'course' => $course,
             'submissions' => $enrichedSubmissions,
             'teacher_assessments' => $teacherAssessments,
+            'learning_groups' => $taskLearningGroups,
+            'available_students' => $availableStudents,
         ]);
     }
 
@@ -119,13 +157,23 @@ class TaskSubmissionController extends Controller
      */
     public function store(StoreTaskSubmissionRequest $request, Task $task)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
-        $learningGroup = LearningGroup::where('course_id', $task->course_id)
+        $learningGroup = LearningGroup::where('task_id', $task->id)
             ->whereHas('members', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             })
             ->first();
+
+        if (!$learningGroup) {
+            // Backward compatibility for groups created before task-based grouping.
+            $learningGroup = LearningGroup::whereNull('task_id')
+                ->where('course_id', $task->course_id)
+                ->whereHas('members', function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                })
+                ->first();
+        }
 
         if (!$learningGroup) {
             return redirect()->back()->with('error', 'You are not assigned to a group in this course.');
@@ -171,11 +219,23 @@ class TaskSubmissionController extends Controller
 
         $validated = $request->validated();
 
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $fileName = $this->buildSubmissionFileName($file, $isFinalSubmission);
-            $filePath = $file->storeAs("task_submissions/task_{$task->id}", $fileName, 'public');
-            $validated['file_path'] = $filePath;
+        if ($request->hasFile('task_file')) {
+            $taskFile = $request->file('task_file');
+            $taskFileName = $this->buildSubmissionFileName($taskFile, $isFinalSubmission, 'task');
+            $validated['task_file_path'] = $taskFile->storeAs("task_submissions/task_{$task->id}", $taskFileName, 'public');
+        }
+
+        if ($request->hasFile('product_file')) {
+            $productFile = $request->file('product_file');
+            $productFileName = $this->buildSubmissionFileName($productFile, $isFinalSubmission, 'product');
+            $validated['product_file_path'] = $productFile->storeAs("task_submissions/task_{$task->id}", $productFileName, 'public');
+        }
+
+        if ($request->hasFile('file') && !isset($validated['task_file_path'])) {
+            // Legacy support for previous single-file submission payload.
+            $legacyFile = $request->file('file');
+            $legacyFileName = $this->buildSubmissionFileName($legacyFile, $isFinalSubmission, 'task');
+            $validated['task_file_path'] = $legacyFile->storeAs("task_submissions/task_{$task->id}", $legacyFileName, 'public');
         }
 
         TaskSubmission::create([
@@ -184,7 +244,9 @@ class TaskSubmissionController extends Controller
             'submitted_by' => $user->id,
             'submission_label' => $submissionLabel,
             'description' => $validated['description'] ?? null,
-            'file_path' => $validated['file_path'] ?? null,
+            'file_path' => $validated['task_file_path'] ?? null,
+            'task_file_path' => $validated['task_file_path'] ?? null,
+            'product_file_path' => $validated['product_file_path'] ?? null,
             'status' => 'submitted',
         ]);
 
@@ -195,7 +257,7 @@ class TaskSubmissionController extends Controller
         return redirect()->back()->with('success', $message);
     }
 
-    private function buildSubmissionFileName(UploadedFile $file, bool $isFinalSubmission): string
+    private function buildSubmissionFileName(UploadedFile $file, bool $isFinalSubmission, string $fileType): string
     {
         $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $extension = $file->getClientOriginalExtension();
@@ -209,15 +271,19 @@ class TaskSubmissionController extends Controller
             $baseName = 'submission';
         }
 
+        if (!Str::contains(Str::lower($baseName), $fileType)) {
+            $baseName .= '_'.$fileType;
+        }
+
         return time().'_'.$baseName.'.'.$extension;
     }
 
     /**
      * Download submission file
      */
-    public function downloadSubmission(TaskSubmission $submission)
+    public function downloadSubmission(TaskSubmission $submission, ?string $fileType = null)
     {
-        $user = auth()->user();
+        $user = Auth::user();
         $task = $submission->task;
         $course = $task->course;
 
@@ -233,11 +299,16 @@ class TaskSubmissionController extends Controller
             }
         }
 
-        if (!$submission->file_path || !Storage::disk('public')->exists($submission->file_path)) {
+        $resolvedFileType = $fileType === 'product' ? 'product' : 'task';
+        $filePath = $resolvedFileType === 'product'
+            ? $submission->product_file_path
+            : ($submission->task_file_path ?: $submission->file_path);
+
+        if (!$filePath || !Storage::disk('public')->exists($filePath)) {
             abort(404, 'File not found.');
         }
 
-        return Storage::disk('public')->download($submission->file_path);
+        return response()->download(Storage::disk('public')->path($filePath));
     }
 
     /**
@@ -245,7 +316,7 @@ class TaskSubmissionController extends Controller
      */
     public function updateStatus(Request $request, TaskSubmission $submission)
     {
-        $user = auth()->user();
+        $user = Auth::user();
         $course = $submission->task->course;
 
         // Only teacher can update status

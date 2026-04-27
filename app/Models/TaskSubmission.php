@@ -21,6 +21,8 @@ class TaskSubmission extends Model
         'submission_label',
         'description',
         'file_path',
+        'task_file_path',
+        'product_file_path',
         'status',
         'teacher_notes',
     ];

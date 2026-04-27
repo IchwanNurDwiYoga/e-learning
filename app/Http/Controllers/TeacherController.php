@@ -6,6 +6,7 @@ use App\Models\Course;
 use App\Models\LearningGroup;
 use App\Models\LearningGroupMembers;
 use App\Models\Subjects;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -80,29 +81,13 @@ class TeacherController extends Controller
         }
 
         $course->load([
-            'learningGroups' => function ($query) {
-                $query->with([
-                    'members' => function ($memberQuery) {
-                        $memberQuery->select('users.id', 'name', 'username');
-                    }
-                ]);
-            },
             'tasks' => function ($query) {
-                $query->latest()->get();
-            }
+                $query->latest();
+            },
         ]);
-
-        $studentIdsInCourse = LearningGroupMembers::whereHas('learningGroup', function ($query) use ($course) {
-            $query->where('course_id', $course->id);
-        })->pluck('user_id');
-
-        $availableStudents = User::where('role', 'student')
-            ->whereNotIn('id', $studentIdsInCourse)
-            ->get(['id', 'name', 'username']);
 
         return Inertia::render('Teacher/CourseDetail', [
             'course' => $course,
-            'availableStudents' => $availableStudents,
         ]);
     }
 
@@ -138,12 +123,29 @@ class TeacherController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'course_id' => ['required', 'exists:courses,id'],
+            'course_id' => ['nullable', 'exists:courses,id'],
+            'task_id' => ['nullable', 'exists:tasks,id'],
         ]);
 
-        $course = Course::findOrFail($request->course_id);
+        if (!$request->filled('course_id') && !$request->filled('task_id')) {
+            return Redirect::back()->withErrors(['course_id' => 'course_id atau task_id wajib diisi.']);
+        }
 
-        if ($course->teacher_id !== $request->user()->id) {
+        $task = null;
+        if ($request->filled('task_id')) {
+            $task = Task::with('course')->findOrFail($request->task_id);
+
+            if ($task->course->teacher_id !== $request->user()->id) {
+                abort(403);
+            }
+        }
+
+        $course = $task?->course;
+        if (!$course && $request->filled('course_id')) {
+            $course = Course::findOrFail($request->course_id);
+        }
+
+        if (!$course || $course->teacher_id !== $request->user()->id) {
             abort(403);
         }
 
@@ -155,11 +157,16 @@ class TeacherController extends Controller
         LearningGroup::create([
             'name' => $request->name,
             'subject_id' => $subject->id,
-            'course_id' => $request->course_id,
+            'course_id' => $course->id,
+            'task_id' => $task?->id,
             'created_by' => $request->user()->id,
         ]);
 
-        return Redirect::route('teacher.courses.show', ['course' => $request->course_id]);
+        if ($task) {
+            return Redirect::route('teacher.tasks.show', ['task' => $task->id]);
+        }
+
+        return Redirect::route('teacher.courses.show', ['course' => $course->id]);
     }
 
     public function storeLearningGroupMember(Request $request, LearningGroup $learningGroup): RedirectResponse
@@ -174,19 +181,24 @@ class TeacherController extends Controller
 
         $student = User::findOrFail($request->existing_student_id);
 
-        $alreadyInCourse = LearningGroupMembers::where('user_id', $student->id)
+        $alreadyInTask = LearningGroupMembers::where('user_id', $student->id)
             ->whereHas('learningGroup', function ($query) use ($learningGroup) {
-                $query->where('course_id', $learningGroup->course_id);
+                if ($learningGroup->task_id) {
+                    $query->where('task_id', $learningGroup->task_id);
+                    return;
+                }
+
+                $query->whereNull('task_id')->where('course_id', $learningGroup->course_id);
             })
             ->exists();
 
-        if ($alreadyInCourse) {
-            return Redirect::back()->withErrors(['existing_student_id' => 'This student is already assigned to another group in the same course.']);
+        if ($alreadyInTask) {
+            return Redirect::back()->withErrors(['existing_student_id' => 'This student is already assigned to another group in the same task.']);
         }
 
         $learningGroup->members()->attach($student->id, ['role' => 'member']);
 
-        return Redirect::route('teacher.courses.show', ['course' => $learningGroup->course_id]);
+        return $this->redirectAfterGroupAction($learningGroup);
     }
 
     public function storeStudent(Request $request): RedirectResponse
@@ -220,7 +232,7 @@ class TeacherController extends Controller
 
         $learningGroup->members()->updateExistingPivot($user->id, ['role' => 'leader']);
 
-        return Redirect::route('teacher.courses.show', ['course' => $learningGroup->course_id]);
+        return $this->redirectAfterGroupAction($learningGroup);
     }
 
     public function removeLearningGroupMember(Request $request, LearningGroup $learningGroup, User $user): RedirectResponse
@@ -242,6 +254,15 @@ class TeacherController extends Controller
         }
 
         $member->delete();
+
+        return $this->redirectAfterGroupAction($learningGroup);
+    }
+
+    private function redirectAfterGroupAction(LearningGroup $learningGroup): RedirectResponse
+    {
+        if ($learningGroup->task_id) {
+            return Redirect::route('teacher.tasks.show', ['task' => $learningGroup->task_id]);
+        }
 
         return Redirect::route('teacher.courses.show', ['course' => $learningGroup->course_id]);
     }
